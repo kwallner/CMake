@@ -92,7 +92,7 @@ _cmake()
     _split_longopt && split=true
 
     case "$prev" in
-        -C|-P|--graphviz|--system-information)
+        -C|-P|--graphviz|--dependencies|--system-information)
             _filedir
             return
             ;;

@@ -310,8 +310,10 @@ set(SRCS
   cmGlobVerificationManager.cxx
   cmGlobVerificationManager.h
   cmGraphAdjacencyList.h
-  cmGraphVizWriter.cxx
+  cmDependenciesWriter.h
+  cmDependenciesWriter.cxx
   cmGraphVizWriter.h
+  cmGraphVizWriter.cxx
   cmInstallGenerator.h
   cmInstallGenerator.cxx
   cmInstallExportGenerator.cxx

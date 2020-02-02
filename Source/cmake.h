@@ -593,6 +593,7 @@ protected:
   /// macros.
   void CleanupCommandsAndMacros();
 
+  void GenerateDependencies(const std::string& fileName) const;
   void GenerateGraphViz(const std::string& fileName) const;
 
 private:
@@ -625,6 +626,7 @@ private:
   bool DebugTryCompile = false;
   bool RegenerateDuringBuild = false;
   std::unique_ptr<cmFileTimeCache> FileTimeCache;
+  std::string DependenciesFile;
   std::string GraphVizFile;
   InstalledFilesMap InstalledFiles;
 

@@ -56,6 +56,7 @@
 #  include "cm_jsoncpp_writer.h"
 
 #  include "cmFileAPI.h"
+#  include "cmDependenciesWriter.h"
 #  include "cmGraphVizWriter.h"
 #  include "cmVariableWatch.h"
 #endif
@@ -701,6 +702,14 @@ void cmake::SetArgs(const std::vector<std::string>& args)
       i++;
     } else if (arg.find("-W", 0) == 0) {
       // skip for now
+    } else if (arg.find("--dependencies=", 0) == 0) {
+      std::string path = arg.substr(strlen("--dependencies="));
+      path = cmSystemTools::CollapseFullPath(path);
+      cmSystemTools::ConvertToUnixSlashes(path);
+      this->DependenciesFile = path;
+      if (this->DependenciesFile.empty()) {
+        cmSystemTools::Error("No file specified for --dependencies");
+      }
     } else if (arg.find("--graphviz=", 0) == 0) {
       std::string path = arg.substr(strlen("--graphviz="));
       path = cmSystemTools::CollapseFullPath(path);
@@ -1861,6 +1870,10 @@ int cmake::Generate()
     return -1;
   }
   this->GlobalGenerator->Generate();
+  if (!this->DependenciesFile.empty()) {
+    std::cout << "Generate dependencies: " << this->DependenciesFile << std::endl;
+    this->GenerateDependencies(this->DependenciesFile);
+  }
   if (!this->GraphVizFile.empty()) {
     std::cout << "Generate graphviz: " << this->GraphVizFile << std::endl;
     this->GenerateGraphViz(this->GraphVizFile);
@@ -2352,6 +2365,23 @@ void cmake::TruncateOutputLog(const char* fname)
 void cmake::MarkCliAsUsed(const std::string& variable)
 {
   this->UsedCliVariables[variable] = true;
+}
+
+void cmake::GenerateDependencies(const std::string& fileName) const
+{
+#ifndef CMAKE_BOOTSTRAP
+  cmDependenciesWriter gvWriter(fileName, this->GetGlobalGenerator());
+
+  std::string settingsFile =
+    cmStrCat(this->GetHomeOutputDirectory(), "/CMakeGraphVizOptions.cmake");
+  std::string fallbackSettingsFile =
+    cmStrCat(this->GetHomeDirectory(), "/CMakeGraphVizOptions.cmake");
+
+  gvWriter.ReadSettings(settingsFile, fallbackSettingsFile);
+
+  gvWriter.Write();
+
+#endif
 }
 
 void cmake::GenerateGraphViz(const std::string& fileName) const
