@@ -92,6 +92,10 @@ cmDependenciesWriter::cmDependenciesWriter(std::string const& fileName,
   , GenerateDependers(true)
 {
   DependenciesRoot["graph"] = Json::Value();
+  DependenciesRoot["graph"]["directed"] = true;
+  DependenciesRoot["graph"]["type"] = "graph type";
+  DependenciesRoot["graph"]["label"] = globalGenerator->GetSafeGlobalSetting("CMAKE_PROJECT_NAME");
+  DependenciesRoot["graph"]["metadata"] = Json::Value(Json::objectValue);
   DependenciesRoot["graph"]["nodes"] = Json::Value(Json::objectValue);
   DependenciesRoot["graph"]["edges"] = Json::Value(Json::arrayValue);
 }
@@ -131,6 +135,7 @@ void cmDependenciesWriter::OnItem(cmLinkItem const& item)
   nodeValue["type"] = "node type";
   nodeValue["label"] = cmStrCat("Target ", item.AsStr());
   nodeValue["metadata"] = Json::Value(Json::objectValue);
+  nodeValue["metadata"]["target_type"] = cmState::GetTargetTypeName(item.Target ? item.Target->GetType() : cmStateEnums::UNKNOWN_LIBRARY);
 
   DependenciesRoot["graph"]["nodes"][item.AsStr()] = nodeValue;
 
