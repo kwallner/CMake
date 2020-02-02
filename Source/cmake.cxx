@@ -2373,9 +2373,9 @@ void cmake::GenerateDependencies(const std::string& fileName) const
   cmDependenciesWriter gvWriter(fileName, this->GetGlobalGenerator());
 
   std::string settingsFile =
-    cmStrCat(this->GetHomeOutputDirectory(), "/CMakeGraphVizOptions.cmake");
+    cmStrCat(this->GetHomeOutputDirectory(), "/CMakeDependenciesOptions.cmake");
   std::string fallbackSettingsFile =
-    cmStrCat(this->GetHomeDirectory(), "/CMakeGraphVizOptions.cmake");
+    cmStrCat(this->GetHomeDirectory(), "/CMakeDependenciesOptions.cmake");
 
   gvWriter.ReadSettings(settingsFile, fallbackSettingsFile);
 

@@ -15,6 +15,7 @@
 #include "cmGeneratedFileStream.h"
 #include "cmLinkItemGraphVisitor.h"
 #include "cmStateTypes.h"
+#include "cm_jsoncpp_value.h"
 
 class cmLinkItem;
 class cmGlobalGenerator;
@@ -50,22 +51,6 @@ private:
   void VisitLink(cmLinkItem const& depender, cmLinkItem const& dependee,
                  bool isDirectLink, std::string const& scopeType = "");
 
-  void WriteHeader(cmGeneratedFileStream& fs, std::string const& name);
-
-  void WriteFooter(cmGeneratedFileStream& fs);
-
-  void WriteLegend(cmGeneratedFileStream& fs);
-
-  void WriteNode(cmGeneratedFileStream& fs, cmLinkItem const& item);
-
-  void CreateTargetFile(FileStreamMap& fileStreamMap, cmLinkItem const& target,
-                        std::string const& fileNameSuffix = "");
-
-  void WriteConnection(cmGeneratedFileStream& fs,
-                       cmLinkItem const& dependerTargetName,
-                       cmLinkItem const& dependeeTargetName,
-                       std::string const& edgeStyle);
-
   bool ItemExcluded(cmLinkItem const& item);
   bool ItemNameFilteredOut(std::string const& itemName);
   bool TargetTypeEnabled(cmStateEnums::TargetType targetType) const;
@@ -79,19 +64,17 @@ private:
   static std::string PathSafeString(std::string const& str);
 
   std::string FileName;
-  cmGeneratedFileStream GlobalFileStream;
-  FileStreamMap PerTargetFileStreams;
-  FileStreamMap TargetDependersFileStreams;
 
-  std::string GraphName;
-  std::string GraphHeader;
-  std::string GraphNodePrefix;
+  int IndentLength;
+  bool IndentUseSpaces;
+
+  Json::Value DependenciesRoot;
 
   std::vector<cmsys::RegularExpression> TargetsToIgnoreRegex;
 
   cmGlobalGenerator const* GlobalGenerator;
 
-  int NextNodeId;
+  //int NextNodeId;
   // maps from the actual item names to node names in dot:
   std::map<std::string, std::string> NodeNames;
 
