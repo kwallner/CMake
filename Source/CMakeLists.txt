@@ -244,6 +244,8 @@ set(SRCS
   cmExtraKateGenerator.h
   cmExtraSublimeTextGenerator.cxx
   cmExtraSublimeTextGenerator.h
+  cmExtraVSCodeGenerator.cxx
+  cmExtraVSCodeGenerator.h
   cmFileAPI.cxx
   cmFileAPI.h
   cmFileAPICache.cxx
