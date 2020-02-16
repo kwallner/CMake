@@ -104,6 +104,7 @@
 #endif
 #include "cmExtraKateGenerator.h"
 #include "cmExtraSublimeTextGenerator.h"
+#include "cmExtraVSCodeGenerator.h"
 
 #ifdef CMAKE_USE_ECLIPSE
 #  include "cmExtraEclipseCDT4Generator.h"
@@ -1099,6 +1100,8 @@ void cmake::AddDefaultExtraGenerators()
 #  ifdef CMAKE_USE_ECLIPSE
   this->ExtraGenerators.push_back(cmExtraEclipseCDT4Generator::GetFactory());
 #  endif
+
+  this->ExtraGenerators.push_back(cmExtraVSCodeGenerator::GetFactory());
 
 #endif
 }

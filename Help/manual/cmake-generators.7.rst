@@ -116,3 +116,4 @@ The following extra generators are known to CMake.
    /generator/Eclipse CDT4
    /generator/Kate
    /generator/Sublime Text 2
+   /generator/Visual Studio Code
