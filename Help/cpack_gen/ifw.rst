@@ -1,51 +1,28 @@
 CPack IFW Generator
 -------------------
 
-See :module:`CPackIFW` for details on the CPackIFW module.
+Configure and run the Qt Installer Framework to generate a Qt installer.
 
-.. _QtIFW: http://doc.qt.io/qtinstallerframework/index.html
+.. only:: html
 
+  .. contents::
 
 Overview
 ^^^^^^^^
 
-CPack ``IFW`` generator helps you to create online and offline
-binary cross-platform installers with a graphical user interface.
+This :manual:`cpack generator <cpack-generators(7)>` generates
+configuration and meta information for the `Qt Installer Framework
+<http://doc.qt.io/qtinstallerframework/index.html>`_ (QtIFW),
+and runs QtIFW tools to generate a Qt installer.
 
-CPack IFW generator prepares project installation and generates configuration
-and meta information for QtIFW_ tools.
+QtIFW provides tools and utilities to create installers for
+the platforms supported by `Qt <https://www.qt.io>`_: Linux,
+Microsoft Windows, and macOS.
 
-The QtIFW_ provides a set of tools and utilities to create
-installers for the supported desktop Qt platforms: Linux, Microsoft Windows,
-and macOS.
-
-You should also install QtIFW_ to use CPack ``IFW`` generator.
-
-Hints
-^^^^^
-
-Generally, the CPack ``IFW`` generator automatically finds QtIFW_ tools,
-but if you don't use a default path for installation of the QtIFW_ tools,
-the path may be specified in either a CMake or an environment variable:
-
-.. variable:: CPACK_IFW_ROOT
-
- An CMake variable which specifies the location of the QtIFW_ tool suite.
-
- The variable will be cached in the ``CPackConfig.cmake`` file and used at
- CPack runtime.
-
-.. variable:: QTIFWDIR
-
- An environment variable which specifies the location of the QtIFW_ tool
- suite.
-
-.. note::
-  The specified path should not contain "bin" at the end
-  (for example: "D:\\DevTools\\QtIFW2.0.5").
-
-The :variable:`CPACK_IFW_ROOT` variable has a higher priority and overrides
-the value of the :variable:`QTIFWDIR` variable.
+To make use of this generator, QtIFW needs to be installed.
+The :module:`CPackIFW` module looks for the location of the
+QtIFW command-line utilities, and defines several commands to
+control the behavior of this generator.
 
 Internationalization
 ^^^^^^^^^^^^^^^^^^^^
@@ -53,7 +30,7 @@ Internationalization
 Some variables and command arguments support internationalization via
 CMake script. This is an optional feature.
 
-Installers created by QtIFW_ tools have built-in support for
+Installers created by QtIFW tools have built-in support for
 internationalization and many phrases are localized to many languages,
 but this does not apply to the description of the your components and groups
 that will be distributed.
@@ -162,6 +139,8 @@ Package
  Default target directory for installation.
  By default used
  "@ApplicationsDir@/:variable:`CPACK_PACKAGE_INSTALL_DIRECTORY`"
+ (variables embedded in '@' are expanded by the
+ `QtIFW scripting engine <https://doc.qt.io/qtinstallerframework/scripting.html>`_).
 
  You can use predefined variables.
 
@@ -185,7 +164,7 @@ Package
  Filename of the generated maintenance tool.
  The platform-specific executable file extension is appended.
 
- By default used QtIFW_ defaults (``maintenancetool``).
+ By default used QtIFW defaults (``maintenancetool``).
 
 .. variable:: CPACK_IFW_PACKAGE_REMOVE_TARGET_DIR
 
@@ -197,19 +176,19 @@ Package
 
  Filename for the configuration of the generated maintenance tool.
 
- By default used QtIFW_ defaults (``maintenancetool.ini``).
+ By default used QtIFW defaults (``maintenancetool.ini``).
 
 .. variable:: CPACK_IFW_PACKAGE_ALLOW_NON_ASCII_CHARACTERS
 
  Set to ``ON`` if the installation path can contain non-ASCII characters.
 
- Is ``ON`` for QtIFW_ less 2.0 tools.
+ Is ``ON`` for QtIFW less 2.0 tools.
 
 .. variable:: CPACK_IFW_PACKAGE_ALLOW_SPACE_IN_PATH
 
  Set to ``OFF`` if the installation path cannot contain space characters.
 
- Is ``ON`` for QtIFW_ less 2.0 tools.
+ Is ``ON`` for QtIFW less 2.0 tools.
 
 .. variable:: CPACK_IFW_PACKAGE_CONTROL_SCRIPT
 
@@ -266,38 +245,60 @@ Components
 
  Additional prepared repository dirs that will be used to resolve and
  repack dependent components. This feature available only
- since QtIFW_ 3.1.
+ since QtIFW 3.1.
 
-Tools
-"""""
+QtIFW Tools
+"""""""""""
 
 .. variable:: CPACK_IFW_FRAMEWORK_VERSION
 
- The version of used QtIFW_ tools.
+ The version of used QtIFW tools.
+
+The following variables provide the locations of the QtIFW
+command-line tools as discovered by the module :module:`CPackIFW`.
+These variables are cached, and may be configured if needed.
 
 .. variable:: CPACK_IFW_BINARYCREATOR_EXECUTABLE
 
- The path to "binarycreator" command line client.
-
- This variable is cached and may be configured if needed.
+ The path to ``binarycreator``.
 
 .. variable:: CPACK_IFW_REPOGEN_EXECUTABLE
 
- The path to "repogen" command line client.
-
- This variable is cached and may be configured if needed.
+ The path to ``repogen``.
 
 .. variable:: CPACK_IFW_INSTALLERBASE_EXECUTABLE
 
- The path to "installerbase" installer executable base.
-
- This variable is cached and may be configured if needed.
+ The path to ``installerbase``.
 
 .. variable:: CPACK_IFW_DEVTOOL_EXECUTABLE
 
- The path to "devtool" command line client.
+ The path to ``devtool``.
 
- This variable is cached and may be configured if needed.
+Hints for Finding QtIFW
+"""""""""""""""""""""""
+
+Generally, the CPack ``IFW`` generator automatically finds QtIFW tools,
+but if you don't use a default path for installation of the QtIFW tools,
+the path may be specified in either a CMake or an environment variable:
+
+.. variable:: CPACK_IFW_ROOT
+
+ An CMake variable which specifies the location of the QtIFW tool suite.
+
+ The variable will be cached in the ``CPackConfig.cmake`` file and used at
+ CPack runtime.
+
+.. variable:: QTIFWDIR
+
+ An environment variable which specifies the location of the QtIFW tool
+ suite.
+
+.. note::
+  The specified path should not contain "bin" at the end
+  (for example: "D:\\DevTools\\QtIFW2.0.5").
+
+The :variable:`CPACK_IFW_ROOT` variable has a higher priority and overrides
+the value of the :variable:`QTIFWDIR` variable.
 
 
 Online installer
@@ -335,5 +336,5 @@ Qt Installer Framework Manual:
 * Promoting Updates:
   http://doc.qt.io/qtinstallerframework/ifw-updates.html
 
-Download Qt Installer Framework for you platform from Qt site:
+Download Qt Installer Framework for your platform from Qt site:
  http://download.qt.io/official_releases/qt-installer-framework

@@ -105,6 +105,7 @@ of the following libraries that are part of the CUDAToolkit:
 - :ref:`cuRAND<cuda_toolkit_cuRAND>`
 - :ref:`cuSOLVER<cuda_toolkit_cuSOLVER>`
 - :ref:`cuSPARSE<cuda_toolkit_cuSPARSE>`
+- :ref:`cuPTI<cuda_toolkit_cupti>`
 - :ref:`NPP<cuda_toolkit_NPP>`
 - :ref:`nvBLAS<cuda_toolkit_nvBLAS>`
 - :ref:`nvGRAPH<cuda_toolkit_nvGRAPH>`
@@ -201,6 +202,18 @@ Targets Created:
 
 - ``CUDA::cusparse``
 - ``CUDA::cusparse_static``
+
+.. _`cuda_toolkit_cupti`:
+
+cupti
+"""""
+
+The `NVIDIA CUDA Profiling Tools Interface <https://developer.nvidia.com/CUPTI>`_.
+
+Targets Created:
+
+- ``CUDA::cupti``
+- ``CUDA::cupti_static``
 
 .. _`cuda_toolkit_NPP`:
 
@@ -333,8 +346,6 @@ Targets Created:
 
 - ``CUDA::nvml``
 
-.. _`cuda_toolkit_opencl`:
-
 .. _`cuda_toolkit_nvToolsExt`:
 
 nvToolsExt
@@ -346,6 +357,8 @@ This is a shared library only.
 Targets Created:
 
 - ``CUDA::nvToolsExt``
+
+.. _`cuda_toolkit_opencl`:
 
 OpenCL
 """"""
@@ -732,15 +745,17 @@ endif()
 if(CUDAToolkit_FOUND)
 
   function(_CUDAToolkit_find_and_add_import_lib lib_name)
-    cmake_parse_arguments(arg "" "" "ALT;DEPS" ${ARGN})
+    cmake_parse_arguments(arg "" "" "ALT;DEPS;EXTRA_PATH_SUFFIXES" ${ARGN})
 
     set(search_names ${lib_name} ${arg_ALT})
 
+    message(STATUS "arg_EXTRA_PATH_SUFFIXES: ${arg_EXTRA_PATH_SUFFIXES}")
     find_library(CUDA_${lib_name}_LIBRARY
       NAMES ${search_names}
       HINTS ${CUDAToolkit_LIBRARY_DIR}
             ENV CUDA_PATH
       PATH_SUFFIXES nvidia/current lib64 lib64/stubs lib/x64 lib lib/stubs
+                    ${arg_EXTRA_PATH_SUFFIXES}
     )
 
     if (NOT TARGET CUDA::${lib_name} AND CUDA_${lib_name}_LIBRARY)
@@ -766,6 +781,31 @@ if(CUDAToolkit_FOUND)
   _CUDAToolkit_find_and_add_import_lib(cudart)
   _CUDAToolkit_find_and_add_import_lib(cudart_static)
 
+  # setup dependencies that are required for cudart_static when building
+  # on linux. These are generally only required when using the CUDA toolkit
+  # when CUDA language is disabled
+  if(NOT TARGET CUDA::cudart_static_deps
+     AND TARGET CUDA::cudart_static)
+
+    add_library(CUDA::cudart_static_deps IMPORTED INTERFACE)
+    target_link_libraries(CUDA::cudart_static INTERFACE CUDA::cudart_static_deps)
+
+    if(UNIX AND (CMAKE_C_COMPILER OR CMAKE_CXX_COMPILER))
+      find_package(Threads REQUIRED)
+      target_link_libraries(CUDA::cudart_static_deps INTERFACE Threads::Threads ${CMAKE_DL_LIBS})
+    endif()
+
+    if(UNIX AND NOT APPLE)
+      # On Linux, you must link against librt when using the static cuda runtime.
+      find_library(CUDAToolkit_rt_LIBRARY rt)
+      if(NOT CUDAToolkit_rt_LIBRARY)
+        message(WARNING "Could not find librt library, needed by CUDA::cudart_static")
+      else()
+        target_link_libraries(CUDA::cudart_static_deps INTERFACE ${CUDAToolkit_rt_LIBRARY})
+      endif()
+    endif()
+  endif()
+
   _CUDAToolkit_find_and_add_import_lib(culibos) # it's a static library
   foreach (cuda_lib cublas cufft curand cusparse nppc nvjpeg)
     _CUDAToolkit_find_and_add_import_lib(${cuda_lib})
@@ -789,6 +829,13 @@ if(CUDAToolkit_FOUND)
     _CUDAToolkit_find_and_add_import_lib(${cuda_lib} DEPS nppc)
     _CUDAToolkit_find_and_add_import_lib(${cuda_lib}_static DEPS nppc_static)
   endforeach()
+
+  _CUDAToolkit_find_and_add_import_lib(cupti
+                                       EXTRA_PATH_SUFFIXES ../extras/CUPTI/lib64/
+                                                           ../extras/CUPTI/lib/)
+  _CUDAToolkit_find_and_add_import_lib(cupti_static
+                                       EXTRA_PATH_SUFFIXES ../extras/CUPTI/lib64/
+                                                           ../extras/CUPTI/lib/)
 
   _CUDAToolkit_find_and_add_import_lib(nvrtc DEPS cuda_driver)
 

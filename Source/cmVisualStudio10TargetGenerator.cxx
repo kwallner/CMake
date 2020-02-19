@@ -2115,9 +2115,7 @@ void cmVisualStudio10TargetGenerator::WriteAllSources(Elem& e0)
   const bool haveUnityBuild =
     this->GeneratorTarget->GetPropertyAsBool("UNITY_BUILD");
 
-  if (haveUnityBuild &&
-      this->GlobalGenerator->GetVersion() >=
-        cmGlobalVisualStudioGenerator::VS15) {
+  if (haveUnityBuild && this->GlobalGenerator->GetSupportsUnityBuilds()) {
     Elem e1(e0, "PropertyGroup");
     e1.Element("EnableUnitySupport", "true");
   }
@@ -2223,9 +2221,7 @@ void cmVisualStudio10TargetGenerator::WriteAllSources(Elem& e0)
       this->WriteSource(e2, si.Source);
 
       bool useNativeUnityBuild = false;
-      if (haveUnityBuild &&
-          this->GlobalGenerator->GetVersion() >=
-            cmGlobalVisualStudioGenerator::VS15) {
+      if (haveUnityBuild && this->GlobalGenerator->GetSupportsUnityBuilds()) {
         // Magic value taken from cmGlobalVisualStudioVersionedGenerator.cxx
         static const std::string vs15 = "141";
         std::string toolset =
@@ -2252,7 +2248,7 @@ void cmVisualStudio10TargetGenerator::WriteAllSources(Elem& e0)
             si.Source->GetProperty("UNITY_SOURCE_FILE"));
           e2.Attribute("UnityFilesDirectory", unityDir);
         } else {
-          // Visual Studio versions prior to 2017 do not know about unity
+          // Visual Studio versions prior to 2017 15.8 do not know about unity
           // builds, thus we exclude the files alredy part of unity sources.
           if (!si.Source->GetPropertyAsBool("SKIP_UNITY_BUILD_INCLUSION")) {
             exclude_configs = si.Configs;
@@ -3263,13 +3259,13 @@ bool cmVisualStudio10TargetGenerator::ComputeCudaLinkOptions(
 
       if (l.IsPath) {
         std::string path = this->LocalGenerator->MaybeConvertToRelativePath(
-          currentBinDir, l.Value);
+          currentBinDir, l.Value.Value);
         ConvertToWindowsSlash(path);
-        if (!cmVS10IsTargetsFile(l.Value)) {
+        if (!cmVS10IsTargetsFile(l.Value.Value)) {
           libVec.push_back(path);
         }
       } else {
-        libVec.push_back(l.Value);
+        libVec.push_back(l.Value.Value);
       }
     }
 
@@ -3823,9 +3819,9 @@ bool cmVisualStudio10TargetGenerator::ComputeLibOptions(
   std::string currentBinDir =
     this->LocalGenerator->GetCurrentBinaryDirectory();
   for (cmComputeLinkInformation::Item const& l : libs) {
-    if (l.IsPath && cmVS10IsTargetsFile(l.Value)) {
+    if (l.IsPath && cmVS10IsTargetsFile(l.Value.Value)) {
       std::string path = this->LocalGenerator->MaybeConvertToRelativePath(
-        currentBinDir, l.Value);
+        currentBinDir, l.Value.Value);
       ConvertToWindowsSlash(path);
       this->AddTargetsFileAndConfigPair(path, config);
     }
@@ -3909,16 +3905,16 @@ void cmVisualStudio10TargetGenerator::AddLibraries(
 
     if (l.IsPath) {
       std::string path = this->LocalGenerator->MaybeConvertToRelativePath(
-        currentBinDir, l.Value);
+        currentBinDir, l.Value.Value);
       ConvertToWindowsSlash(path);
-      if (cmVS10IsTargetsFile(l.Value)) {
+      if (cmVS10IsTargetsFile(l.Value.Value)) {
         vsTargetVec.push_back(path);
       } else {
         libVec.push_back(path);
       }
     } else if (!l.Target ||
                l.Target->GetType() != cmStateEnums::INTERFACE_LIBRARY) {
-      libVec.push_back(l.Value);
+      libVec.push_back(l.Value.Value);
     }
   }
 }

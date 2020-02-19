@@ -552,7 +552,7 @@ void cmGlobalXCodeGenerator::AddExtraTargets(
 
       if (regenerate &&
           (target->GetName() != CMAKE_CHECK_BUILD_SYSTEM_TARGET)) {
-        target->Target->AddUtility(CMAKE_CHECK_BUILD_SYSTEM_TARGET);
+        target->Target->AddUtility(CMAKE_CHECK_BUILD_SYSTEM_TARGET, false);
       }
 
       // make all exe, shared libs and modules
@@ -571,7 +571,7 @@ void cmGlobalXCodeGenerator::AddExtraTargets(
       }
 
       if (!this->IsExcluded(gens[0], target.get())) {
-        allbuild->AddUtility(target->GetName());
+        allbuild->AddUtility(target->GetName(), false);
       }
     }
   }
@@ -2817,11 +2817,11 @@ void cmGlobalXCodeGenerator::AddDependAndLinkInformation(cmXCodeObject* target)
         linkLibs += sep;
         sep = " ";
         if (libName.IsPath) {
-          linkLibs += this->XCodeEscapePath(libName.Value);
+          linkLibs += this->XCodeEscapePath(libName.Value.Value);
         } else if (!libName.Target ||
                    libName.Target->GetType() !=
                      cmStateEnums::INTERFACE_LIBRARY) {
-          linkLibs += libName.Value;
+          linkLibs += libName.Value.Value;
         }
         if (libName.Target && !libName.Target->IsImported()) {
           target->AddDependTarget(configName, libName.Target->GetName());
