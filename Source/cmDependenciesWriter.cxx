@@ -24,53 +24,6 @@
 
 #include "cm_jsoncpp_writer.h"
 
-namespace {
-
-char const* const GRAPHVIZ_EDGE_STYLE_PUBLIC = "solid";
-char const* const GRAPHVIZ_EDGE_STYLE_INTERFACE = "dashed";
-char const* const GRAPHVIZ_EDGE_STYLE_PRIVATE = "dotted";
-
-char const* const GRAPHVIZ_NODE_SHAPE_EXECUTABLE = "egg"; // egg-xecutable
-
-// Normal libraries.
-char const* const GRAPHVIZ_NODE_SHAPE_LIBRARY_STATIC = "octagon";
-char const* const GRAPHVIZ_NODE_SHAPE_LIBRARY_SHARED = "doubleoctagon";
-char const* const GRAPHVIZ_NODE_SHAPE_LIBRARY_MODULE = "tripleoctagon";
-
-char const* const GRAPHVIZ_NODE_SHAPE_LIBRARY_INTERFACE = "pentagon";
-char const* const GRAPHVIZ_NODE_SHAPE_LIBRARY_OBJECT = "hexagon";
-char const* const GRAPHVIZ_NODE_SHAPE_LIBRARY_UNKNOWN = "septagon";
-
-char const* const GRAPHVIZ_NODE_SHAPE_UTILITY = "box";
-
-const char* getShapeForTarget(const cmLinkItem& item)
-{
-  if (item.Target == nullptr) {
-    return GRAPHVIZ_NODE_SHAPE_LIBRARY_UNKNOWN;
-  }
-
-  switch (item.Target->GetType()) {
-    case cmStateEnums::EXECUTABLE:
-      return GRAPHVIZ_NODE_SHAPE_EXECUTABLE;
-    case cmStateEnums::STATIC_LIBRARY:
-      return GRAPHVIZ_NODE_SHAPE_LIBRARY_STATIC;
-    case cmStateEnums::SHARED_LIBRARY:
-      return GRAPHVIZ_NODE_SHAPE_LIBRARY_SHARED;
-    case cmStateEnums::MODULE_LIBRARY:
-      return GRAPHVIZ_NODE_SHAPE_LIBRARY_MODULE;
-    case cmStateEnums::OBJECT_LIBRARY:
-      return GRAPHVIZ_NODE_SHAPE_LIBRARY_OBJECT;
-    case cmStateEnums::UTILITY:
-      return GRAPHVIZ_NODE_SHAPE_UTILITY;
-    case cmStateEnums::INTERFACE_LIBRARY:
-      return GRAPHVIZ_NODE_SHAPE_LIBRARY_INTERFACE;
-    case cmStateEnums::UNKNOWN_LIBRARY:
-    default:
-      return GRAPHVIZ_NODE_SHAPE_LIBRARY_UNKNOWN;
-  }
-}
-}
-
 cmDependenciesWriter::cmDependenciesWriter(std::string const& fileName,
                                    const cmGlobalGenerator* globalGenerator)
   : FileName(fileName)
@@ -98,6 +51,24 @@ cmDependenciesWriter::cmDependenciesWriter(std::string const& fileName,
   DependenciesRoot["graph"]["metadata"] = Json::Value(Json::objectValue);
   DependenciesRoot["graph"]["nodes"] = Json::Value(Json::objectValue);
   DependenciesRoot["graph"]["edges"] = Json::Value(Json::arrayValue);
+
+  Json::Value& metadata = DependenciesRoot["graph"]["metadata"];
+  metadata["project_name"] = globalGenerator->GetSafeGlobalSetting("CMAKE_PROJECT_NAME");
+  metadata["conan_package_name"] = globalGenerator->GetSafeGlobalSetting("CONAN_PACKAGE_NAME");
+  metadata["conan_package_version"] = globalGenerator->GetSafeGlobalSetting("CONAN_PACKAGE_VERSION");
+  metadata["conan_settings_arch"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_ARCH");
+  metadata["conan_settings_arch"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_BUILD_TYPE");
+  metadata["conan_settings_compiler"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_COMPILER");
+  metadata["conan_settings_compiler_runtime"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_COMPILER_RUNTIME");
+  metadata["conan_settings_compiler_version"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_COMPILER_VERSION");
+  metadata["conan_settings_os"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_OS");
+  metadata["conan_dependencies"] = Json::Value(Json::arrayValue);
+  std::vector<std::string> conan_dependencies = cmSystemTools::SplitString(globalGenerator->GetSafeGlobalSetting("CONAN_DEPENDENCIES"), ';', false);
+  for (const auto& conan_dependency : conan_dependencies) 
+  {
+    metadata["conan_dependencies"].append(conan_dependency);
+  }
+  // Get 
 }
 
 cmDependenciesWriter::~cmDependenciesWriter()
@@ -157,26 +128,12 @@ void cmDependenciesWriter::OnItem(cmLinkItem const& item)
 #endif
 }
 
-#if 0
-void cmDependenciesWriter::CreateTargetFile(FileStreamMap& fileStreamMap,
-                                        cmLinkItem const& item,
-                                        std::string const& fileNameSuffix)
-{
-  auto const pathSafeItemName = PathSafeString(item.AsStr());
-  auto const perTargetFileName =
-    cmStrCat(this->FileName, '.', pathSafeItemName, fileNameSuffix);
-  auto perTargetFileStream =
-    cm::make_unique<cmGeneratedFileStream>(perTargetFileName);
-
-  fileStreamMap.emplace(item.AsStr(), std::move(perTargetFileStream));
-}
-#endif
-
 void cmDependenciesWriter::OnDirectLink(cmLinkItem const& depender,
                                     cmLinkItem const& dependee,
                                     DependencyType dt)
 {
-  this->VisitLink(depender, dependee, true, GetEdgeStyle(dt));
+  // TODO: dt can be DependencyType::LinkPrivate or DependencyType::LinkInterface  
+  this->VisitLink(depender, dependee, true);
 }
 
 void cmDependenciesWriter::OnIndirectLink(cmLinkItem const& depender,
@@ -199,8 +156,8 @@ void cmDependenciesWriter::VisitLink(cmLinkItem const& depender,
 
   Json::Value edgeValue(Json::objectValue); // NextNodeId);
   edgeValue["relation"] = "edge relationship",
-  edgeValue["source"] = dependee.AsStr();
-  edgeValue["target"] = depender.AsStr();
+  edgeValue["source"] = depender.AsStr();
+  edgeValue["target"] = dependee.AsStr(); 
 
   DependenciesRoot["graph"]["edges"].append(edgeValue);
 
@@ -391,22 +348,6 @@ std::string cmDependenciesWriter::ItemNameWithAliases(
   }
 
   return nameWithAliases;
-}
-
-std::string cmDependenciesWriter::GetEdgeStyle(DependencyType dt)
-{
-  std::string style;
-  switch (dt) {
-    case DependencyType::LinkPrivate:
-      style = "[ style = " + std::string(GRAPHVIZ_EDGE_STYLE_PRIVATE) + " ]";
-      break;
-    case DependencyType::LinkInterface:
-      style = "[ style = " + std::string(GRAPHVIZ_EDGE_STYLE_INTERFACE) + " ]";
-      break;
-    default:
-      break;
-  }
-  return style;
 }
 
 std::string cmDependenciesWriter::EscapeForDotFile(std::string const& str)

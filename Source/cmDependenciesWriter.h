@@ -57,8 +57,6 @@ private:
 
   std::string ItemNameWithAliases(std::string const& itemName) const;
 
-  static std::string GetEdgeStyle(DependencyType dt);
-
   static std::string EscapeForDotFile(std::string const& str);
 
   static std::string PathSafeString(std::string const& str);
