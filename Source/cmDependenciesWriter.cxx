@@ -29,46 +29,49 @@ cmDependenciesWriter::cmDependenciesWriter(std::string const& fileName,
   : FileName(fileName)
   , IndentLength(2)
   , IndentUseSpaces(true)
-  , DependenciesRoot()
+  , JsonRoot()
   , GlobalGenerator(globalGenerator)
 {
-  DependenciesRoot["graph"] = Json::Value();
-  DependenciesRoot["graph"]["directed"] = true;
-  DependenciesRoot["graph"]["type"] = "graph type";
-  DependenciesRoot["graph"]["label"] = GlobalGenerator->GetSafeGlobalSetting("CMAKE_PROJECT_NAME");
-  DependenciesRoot["graph"]["metadata"] = Json::Value(Json::objectValue);
-  DependenciesRoot["graph"]["nodes"] = Json::Value(Json::objectValue);
-  DependenciesRoot["graph"]["edges"] = Json::Value(Json::arrayValue);
-
-  Json::Value& metadata = DependenciesRoot["graph"]["metadata"];
-  metadata["project_name"] = globalGenerator->GetSafeGlobalSetting("CMAKE_PROJECT_NAME");
+  JsonRoot["graph"] = Json::Value();
+  JsonRoot["graph"]["directed"] = true;
+  JsonRoot["graph"]["type"] = "graph type";
+  JsonRoot["graph"]["label"] = GlobalGenerator->GetSafeGlobalSetting("CMAKE_PROJECT_NAME");
+  JsonRoot["graph"]["metadata"] = Json::Value(Json::objectValue);
+  JsonRoot["graph"]["nodes"] = Json::Value(Json::objectValue);
+  JsonRoot["graph"]["edges"] = Json::Value(Json::arrayValue);
 
   {
+    Json::Value& cmake_definfions = JsonRoot["graph"]["metadata"]["cmake_definitions"] = Json::Value(Json::objectValue);
     const auto& lg = GlobalGenerator->GetLocalGenerators()[0];
 
     const cmMakefile* mf = lg->GetMakefile();
     std::vector<std::string> definitions = mf->GetDefinitions();
     for (const std::string& definiton : definitions) {
-      metadata[definiton] = mf->GetSafeDefinition(definiton);
+      const std::string& value = mf->GetSafeDefinition(definiton);
+      if (value.find(';') == std::string::npos)
+      {
+        cmake_definfions[definiton] = value;
+      }
+      else 
+      {
+        std::vector<std::string> list_values = cmSystemTools::SplitString(value, ';');
+        Json::Value& cmake_array = cmake_definfions[definiton] = Json::Value(Json::arrayValue);
+        for (const std::string& list_value : list_values) {
+          cmake_array.append(list_value);
+        }
+      }
     }
   }
 
-  //metadata["conan_package_name"] = globalGenerator->GetSafeGlobalSetting("CONAN_PACKAGE_NAME");
-  //metadata["conan_package_version"] = globalGenerator->GetSafeGlobalSetting("CONAN_PACKAGE_VERSION");
-  //metadata["conan_settings_arch"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_ARCH");
-  //metadata["conan_settings_arch"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_BUILD_TYPE");
-  //metadata["conan_settings_compiler"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_COMPILER");
-  //metadata["conan_settings_compiler_runtime"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_COMPILER_RUNTIME");
-  //metadata["conan_settings_compiler_version"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_COMPILER_VERSION");
-  //metadata["conan_settings_os"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_OS");
-
-  metadata["conan_dependencies"] = Json::Value(Json::arrayValue);
-  std::vector<std::string> conan_dependencies = cmSystemTools::SplitString(globalGenerator->GetSafeGlobalSetting("CONAN_DEPENDENCIES"), ';', false);
-  for (const auto& conan_dependency : conan_dependencies) 
   {
-    metadata["conan_dependencies"].append(conan_dependency);
+    Json::Value& metadata = JsonRoot["graph"]["metadata"];
+    metadata["conan_dependencies"] = Json::Value(Json::arrayValue);
+    std::vector<std::string> conan_dependencies = cmSystemTools::SplitString(globalGenerator->GetSafeGlobalSetting("CONAN_DEPENDENCIES"), ';', false);
+    for (const auto& conan_dependency : conan_dependencies)
+    {
+      metadata["conan_dependencies"].append(conan_dependency);
+    }
   }
-  // Get 
 }
 
 cmDependenciesWriter::~cmDependenciesWriter()
@@ -79,11 +82,11 @@ cmDependenciesWriter::~cmDependenciesWriter()
   if (output_file.is_open())
   {
     Json::StreamWriterBuilder builder;
-    builder["commentStyle"] = "None"; // FIXME: Use config
-    builder["indentation"] = "   ";
+    builder["commentStyle"] = "None"; // FIXME: Use config?
+    builder["indentation"] = "   "; // Fixme: Use ident length and ident use spaces
 
     std::unique_ptr<Json::StreamWriter> writer(builder.newStreamWriter());
-    writer->write(DependenciesRoot, &output_file);
+    writer->write(JsonRoot, &output_file);
     output_file.close();
   }
   else 
@@ -94,6 +97,7 @@ cmDependenciesWriter::~cmDependenciesWriter()
 
 void cmDependenciesWriter::VisitGraph(std::string const&)
 {
+  // CHECK: Not called !!!???
 }
 
 void cmDependenciesWriter::OnItem(cmLinkItem const& item)
@@ -105,10 +109,12 @@ void cmDependenciesWriter::OnItem(cmLinkItem const& item)
   Json::Value nodeValue(Json::objectValue); 
   nodeValue["type"] = "node type";
   nodeValue["label"] = cmStrCat("Target ", item.AsStr());
-  nodeValue["metadata"] = Json::Value(Json::objectValue);
-  nodeValue["metadata"]["target_type"] = cmState::GetTargetTypeName(item.Target ? item.Target->GetType() : cmStateEnums::UNKNOWN_LIBRARY);
-
-  DependenciesRoot["graph"]["nodes"][item.AsStr()] = nodeValue;
+  Json::Value& metadata = nodeValue["metadata"] = Json::Value(Json::objectValue);
+  if (item.Target)
+  {
+    metadata["target_type"] = cmState::GetTargetTypeName(item.Target->GetType());
+  }
+  JsonRoot["graph"]["nodes"][item.AsStr()] = nodeValue;
 
 
 }
@@ -128,7 +134,10 @@ void cmDependenciesWriter::OnDirectLink(cmLinkItem const& depender,
   edgeValue["source"] = depender.AsStr();
   edgeValue["target"] = dependee.AsStr();
 
-  DependenciesRoot["graph"]["edges"].append(edgeValue);
+  Json::Value& metadata = edgeValue["metadata"] = Json::Value(Json::objectValue);
+  metadata["dependency_type"] = DependencyTypeAsString(dt);
+  
+  JsonRoot["graph"]["edges"].append(edgeValue);
 }
 
 void cmDependenciesWriter::OnIndirectLink(cmLinkItem const& depender,
@@ -219,7 +228,7 @@ bool cmDependenciesWriter::ItemExcluded(cmLinkItem const& item)
 {
   auto const itemName = item.AsStr();
 
-  if (this->ItemNameFilteredOut(itemName)) {
+  if (cmGlobalGenerator::IsReservedTarget(itemName)) {
     return true;
   }
 
@@ -240,22 +249,6 @@ bool cmDependenciesWriter::ItemExcluded(cmLinkItem const& item)
   }
 
   return !this->TargetTypeEnabled(item.Target->GetType());
-}
-
-bool cmDependenciesWriter::ItemNameFilteredOut(std::string const& itemName)
-{
-  //if (itemName == ">") {
-    // FIXME: why do we even receive such a target here?
-  //  return true;
-  //}
-
-  if (cmGlobalGenerator::IsReservedTarget(itemName)) {
-    return true;
-  }
-
-  
-
-  return false;
 }
 
 bool cmDependenciesWriter::TargetTypeEnabled(
@@ -304,24 +297,17 @@ std::string cmDependenciesWriter::ItemNameWithAliases(
   return nameWithAliases;
 }
 
-std::string cmDependenciesWriter::EscapeForDotFile(std::string const& str)
+
+const char* cmDependenciesWriter::DependencyTypeAsString(DependencyType dt)
 {
-  return cmSystemTools::EscapeChars(str.data(), "\"");
-}
-
-std::string cmDependenciesWriter::PathSafeString(std::string const& str)
-{
-  std::string pathSafeStr;
-
-  // We'll only keep alphanumerical characters, plus the following ones that
-  // are common, and safe on all platforms:
-  auto const extra_chars = std::set<char>{ '.', '-', '_' };
-
-  for (char c : str) {
-    if (std::isalnum(c) || extra_chars.find(c) != extra_chars.cend()) {
-      pathSafeStr += c;
-    }
+  switch (dt)
+  {
+  case DependencyType::LinkInterface: return "LinkInterface";
+  case DependencyType::LinkPublic: return "LinkPublic";
+  case DependencyType::LinkPrivate: return "LinkPrivate";
+  case DependencyType::Object: return "Object";
+  case DependencyType::Utility: return "Utility";
   }
 
-  return pathSafeStr;
-}
+  return "";
+ }

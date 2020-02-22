@@ -46,20 +46,17 @@ public:
 
 private:
   bool ItemExcluded(cmLinkItem const& item);
-  bool ItemNameFilteredOut(std::string const& itemName);
   bool TargetTypeEnabled(cmStateEnums::TargetType targetType) const;
   std::string ItemNameWithAliases(std::string const& itemName) const;
+  const char* DependencyTypeAsString(DependencyType dt);
 
-  static std::string EscapeForDotFile(std::string const& str);
-
-  static std::string PathSafeString(std::string const& str);
 
   std::string FileName;
 
   int IndentLength;
   bool IndentUseSpaces;
 
-  Json::Value DependenciesRoot;
+  Json::Value JsonRoot;
 
   cmGlobalGenerator const* GlobalGenerator;
 
