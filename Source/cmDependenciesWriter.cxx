@@ -31,37 +31,37 @@ cmDependenciesWriter::cmDependenciesWriter(std::string const& fileName,
   , IndentUseSpaces(true)
   , DependenciesRoot()
   , GlobalGenerator(globalGenerator)
-  //, NextNodeId(0)
-  , GenerateForExecutables(true)
-  , GenerateForStaticLibs(true)
-  , GenerateForSharedLibs(true)
-  , GenerateForModuleLibs(true)
-  , GenerateForInterfaceLibs(true)
-  , GenerateForObjectLibs(true)
-  , GenerateForUnknownLibs(true)
-  , GenerateForCustomTargets(false)
-  , GenerateForExternals(true)
-  , GeneratePerTarget(true)
-  , GenerateDependers(true)
 {
   DependenciesRoot["graph"] = Json::Value();
   DependenciesRoot["graph"]["directed"] = true;
   DependenciesRoot["graph"]["type"] = "graph type";
-  DependenciesRoot["graph"]["label"] = globalGenerator->GetSafeGlobalSetting("CMAKE_PROJECT_NAME");
+  DependenciesRoot["graph"]["label"] = GlobalGenerator->GetSafeGlobalSetting("CMAKE_PROJECT_NAME");
   DependenciesRoot["graph"]["metadata"] = Json::Value(Json::objectValue);
   DependenciesRoot["graph"]["nodes"] = Json::Value(Json::objectValue);
   DependenciesRoot["graph"]["edges"] = Json::Value(Json::arrayValue);
 
   Json::Value& metadata = DependenciesRoot["graph"]["metadata"];
   metadata["project_name"] = globalGenerator->GetSafeGlobalSetting("CMAKE_PROJECT_NAME");
-  metadata["conan_package_name"] = globalGenerator->GetSafeGlobalSetting("CONAN_PACKAGE_NAME");
-  metadata["conan_package_version"] = globalGenerator->GetSafeGlobalSetting("CONAN_PACKAGE_VERSION");
-  metadata["conan_settings_arch"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_ARCH");
-  metadata["conan_settings_arch"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_BUILD_TYPE");
-  metadata["conan_settings_compiler"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_COMPILER");
-  metadata["conan_settings_compiler_runtime"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_COMPILER_RUNTIME");
-  metadata["conan_settings_compiler_version"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_COMPILER_VERSION");
-  metadata["conan_settings_os"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_OS");
+
+  {
+    const auto& lg = GlobalGenerator->GetLocalGenerators()[0];
+
+    const cmMakefile* mf = lg->GetMakefile();
+    std::vector<std::string> definitions = mf->GetDefinitions();
+    for (const std::string& definiton : definitions) {
+      metadata[definiton] = mf->GetSafeDefinition(definiton);
+    }
+  }
+
+  //metadata["conan_package_name"] = globalGenerator->GetSafeGlobalSetting("CONAN_PACKAGE_NAME");
+  //metadata["conan_package_version"] = globalGenerator->GetSafeGlobalSetting("CONAN_PACKAGE_VERSION");
+  //metadata["conan_settings_arch"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_ARCH");
+  //metadata["conan_settings_arch"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_BUILD_TYPE");
+  //metadata["conan_settings_compiler"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_COMPILER");
+  //metadata["conan_settings_compiler_runtime"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_COMPILER_RUNTIME");
+  //metadata["conan_settings_compiler_version"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_COMPILER_VERSION");
+  //metadata["conan_settings_os"] = globalGenerator->GetSafeGlobalSetting("CONAN_SETTINGS_OS");
+
   metadata["conan_dependencies"] = Json::Value(Json::arrayValue);
   std::vector<std::string> conan_dependencies = cmSystemTools::SplitString(globalGenerator->GetSafeGlobalSetting("CONAN_DEPENDENCIES"), ';', false);
   for (const auto& conan_dependency : conan_dependencies) 
@@ -102,7 +102,7 @@ void cmDependenciesWriter::OnItem(cmLinkItem const& item)
     return;
   }
 
-  Json::Value nodeValue(Json::objectValue); // NextNodeId);
+  Json::Value nodeValue(Json::objectValue); 
   nodeValue["type"] = "node type";
   nodeValue["label"] = cmStrCat("Target ", item.AsStr());
   nodeValue["metadata"] = Json::Value(Json::objectValue);
@@ -110,22 +110,7 @@ void cmDependenciesWriter::OnItem(cmLinkItem const& item)
 
   DependenciesRoot["graph"]["nodes"][item.AsStr()] = nodeValue;
 
-  //DependenciesRoot[item.AsStr()] = Json::Value
-  //NodeNames[item.AsStr()] = cmStrCat("", NextNodeId);
-  //++NextNodeId;
 
-  //this->WriteNode(this->GlobalFileStream, item);
-
-#if 0
-  if (this->GeneratePerTarget) {
-    this->CreateTargetFile(this->PerTargetFileStreams, item);
-  }
-
-  if (this->GenerateDependers) {
-    this->CreateTargetFile(this->TargetDependersFileStreams, item,
-                           ".dependers");
-  }
-#endif
 }
 
 void cmDependenciesWriter::OnDirectLink(cmLinkItem const& depender,
@@ -133,49 +118,24 @@ void cmDependenciesWriter::OnDirectLink(cmLinkItem const& depender,
                                     DependencyType dt)
 {
   // TODO: dt can be DependencyType::LinkPrivate or DependencyType::LinkInterface  
-  this->VisitLink(depender, dependee, true);
+ 
+  if (this->ItemExcluded(depender) || this->ItemExcluded(dependee)) {
+    return;
+  }
+
+  Json::Value edgeValue(Json::objectValue);
+  edgeValue["relation"] = "edge relationship",
+  edgeValue["source"] = depender.AsStr();
+  edgeValue["target"] = dependee.AsStr();
+
+  DependenciesRoot["graph"]["edges"].append(edgeValue);
 }
 
 void cmDependenciesWriter::OnIndirectLink(cmLinkItem const& depender,
                                       cmLinkItem const& dependee)
 {
-  this->VisitLink(depender, dependee, false);
-}
-
-void cmDependenciesWriter::VisitLink(cmLinkItem const& depender,
-                                 cmLinkItem const& dependee, bool isDirectLink,
-                                 std::string const& scopeType)
-{
-  if (this->ItemExcluded(depender) || this->ItemExcluded(dependee)) {
-    return;
-  }
-
-  if (!isDirectLink) {
-    return;
-  }
-
-  Json::Value edgeValue(Json::objectValue); // NextNodeId);
-  edgeValue["relation"] = "edge relationship",
-  edgeValue["source"] = depender.AsStr();
-  edgeValue["target"] = dependee.AsStr(); 
-
-  DependenciesRoot["graph"]["edges"].append(edgeValue);
-
-  //this->WriteConnection(this->GlobalFileStream, depender, dependee, scopeType);
-
-#if 0
-  if (this->GeneratePerTarget) {
-    auto fileStream = PerTargetFileStreams[depender.AsStr()].get();
-    //this->WriteNode(*fileStream, dependee);
-    //this->WriteConnection(*fileStream, depender, dependee, scopeType);
-  }
-
-  if (this->GenerateDependers) {
-    auto fileStream = TargetDependersFileStreams[dependee.AsStr()].get();
-    //this->WriteNode(*fileStream, depender);
-    //this->WriteConnection(*fileStream, depender, dependee, scopeType);
-  }
-#endif
+  // Not interested in indirekt links
+  //this->VisitLink(depender, dependee, dt,false);
 }
 
 
@@ -264,18 +224,18 @@ bool cmDependenciesWriter::ItemExcluded(cmLinkItem const& item)
   }
 
   if (item.Target == nullptr) {
-    return !this->GenerateForExternals;
+    return false; // true; // false; // !this->GenerateForExternals;
   }
 
   if (item.Target->GetType() == cmStateEnums::UTILITY) {
     if ((itemName.find("Nightly") == 0) ||
-        (itemName.find("Continuous") == 0) ||
-        (itemName.find("Experimental") == 0)) {
+      (itemName.find("Continuous") == 0) ||
+      (itemName.find("Experimental") == 0)) {
       return true;
     }
   }
 
-  if (item.Target->IsImported() && !this->GenerateForExternals) {
+  if (item.Target->IsImported() /* && !this->GenerateForExternals */ ) {
     return true;
   }
 
@@ -284,22 +244,16 @@ bool cmDependenciesWriter::ItemExcluded(cmLinkItem const& item)
 
 bool cmDependenciesWriter::ItemNameFilteredOut(std::string const& itemName)
 {
-  if (itemName == ">") {
+  //if (itemName == ">") {
     // FIXME: why do we even receive such a target here?
-    return true;
-  }
+  //  return true;
+  //}
 
   if (cmGlobalGenerator::IsReservedTarget(itemName)) {
     return true;
   }
 
-  for (cmsys::RegularExpression& regEx : this->TargetsToIgnoreRegex) {
-    if (regEx.is_valid()) {
-      if (regEx.find(itemName)) {
-        return true;
-      }
-    }
-  }
+  
 
   return false;
 }
@@ -308,28 +262,28 @@ bool cmDependenciesWriter::TargetTypeEnabled(
   cmStateEnums::TargetType targetType) const
 {
   switch (targetType) {
-    case cmStateEnums::EXECUTABLE:
-      return this->GenerateForExecutables;
-    case cmStateEnums::STATIC_LIBRARY:
-      return this->GenerateForStaticLibs;
-    case cmStateEnums::SHARED_LIBRARY:
-      return this->GenerateForSharedLibs;
-    case cmStateEnums::MODULE_LIBRARY:
-      return this->GenerateForModuleLibs;
-    case cmStateEnums::INTERFACE_LIBRARY:
-      return this->GenerateForInterfaceLibs;
-    case cmStateEnums::OBJECT_LIBRARY:
-      return this->GenerateForObjectLibs;
-    case cmStateEnums::UNKNOWN_LIBRARY:
-      return this->GenerateForUnknownLibs;
-    case cmStateEnums::UTILITY:
-      return this->GenerateForCustomTargets;
-    case cmStateEnums::GLOBAL_TARGET:
-      // Built-in targets like edit_cache, etc.
-      // We don't need/want those in the dot file.
-      return false;
-    default:
-      break;
+  case cmStateEnums::EXECUTABLE:
+    return true; // this->GenerateForExecutables;
+  case cmStateEnums::STATIC_LIBRARY:
+    return true; // this->GenerateForStaticLibs;
+  case cmStateEnums::SHARED_LIBRARY:
+    return true; // this->GenerateForSharedLibs;
+  case cmStateEnums::MODULE_LIBRARY:
+    return true; // this->GenerateForModuleLibs;
+  case cmStateEnums::INTERFACE_LIBRARY:
+    return true; //this->GenerateForInterfaceLibs;
+  case cmStateEnums::OBJECT_LIBRARY:
+    return true; //this->GenerateForObjectLibs;
+  case cmStateEnums::UNKNOWN_LIBRARY:
+    return true; //this->GenerateForUnknownLibs;
+  case cmStateEnums::UTILITY:
+    return false; // this->GenerateForCustomTargets;
+  case cmStateEnums::GLOBAL_TARGET:
+    // Built-in targets like edit_cache, etc.
+    // We don't need/want those in the dot file.
+    return false;
+  default:
+    break;
   }
   return false;
 }

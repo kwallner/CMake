@@ -45,16 +45,9 @@ public:
   void Write();
 
 private:
-  using FileStreamMap =
-    std::map<std::string, std::unique_ptr<cmGeneratedFileStream>>;
-
-  void VisitLink(cmLinkItem const& depender, cmLinkItem const& dependee,
-                 bool isDirectLink, std::string const& scopeType = "");
-
   bool ItemExcluded(cmLinkItem const& item);
   bool ItemNameFilteredOut(std::string const& itemName);
   bool TargetTypeEnabled(cmStateEnums::TargetType targetType) const;
-
   std::string ItemNameWithAliases(std::string const& itemName) const;
 
   static std::string EscapeForDotFile(std::string const& str);
@@ -68,25 +61,9 @@ private:
 
   Json::Value DependenciesRoot;
 
-  std::vector<cmsys::RegularExpression> TargetsToIgnoreRegex;
-
   cmGlobalGenerator const* GlobalGenerator;
 
-  //int NextNodeId;
-  // maps from the actual item names to node names in dot:
-  std::map<std::string, std::string> NodeNames;
 
-  bool GenerateForExecutables;
-  bool GenerateForStaticLibs;
-  bool GenerateForSharedLibs;
-  bool GenerateForModuleLibs;
-  bool GenerateForInterfaceLibs;
-  bool GenerateForObjectLibs;
-  bool GenerateForUnknownLibs;
-  bool GenerateForCustomTargets;
-  bool GenerateForExternals;
-  bool GeneratePerTarget;
-  bool GenerateDependers;
 };
 
 #endif
