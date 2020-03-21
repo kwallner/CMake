@@ -356,6 +356,7 @@ set(SRCS
   cmMakefileTargetGenerator.cxx
   cmMakefileExecutableTargetGenerator.cxx
   cmMakefileLibraryTargetGenerator.cxx
+  cmMakefileProfilingData.cxx
   cmMakefileUtilityTargetGenerator.cxx
   cmMessageType.h
   cmMessenger.cxx
@@ -486,6 +487,8 @@ set(SRCS
   cmBuildCommand.h
   cmBuildNameCommand.cxx
   cmBuildNameCommand.h
+  cmCMakeCommand.cxx
+  cmCMakeCommand.h
   cmCMakeHostSystemInformationCommand.cxx
   cmCMakeHostSystemInformationCommand.h
   cmCMakeMinimumRequired.cxx

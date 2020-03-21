@@ -104,6 +104,7 @@ Properties on Targets
    :maxdepth: 1
 
    /prop_tgt/ADDITIONAL_CLEAN_FILES
+   /prop_tgt/AIX_EXPORT_ALL_SYMBOLS
    /prop_tgt/ALIASED_TARGET
    /prop_tgt/ANDROID_ANT_ADDITIONAL_OPTIONS
    /prop_tgt/ANDROID_API
@@ -199,6 +200,7 @@ Properties on Targets
    /prop_tgt/Fortran_FORMAT
    /prop_tgt/Fortran_MODULE_DIRECTORY
    /prop_tgt/FRAMEWORK
+   /prop_tgt/FRAMEWORK_MULTI_CONFIG_POSTFIX_CONFIG
    /prop_tgt/FRAMEWORK_VERSION
    /prop_tgt/GENERATOR_FILE_NAME
    /prop_tgt/GHS_INTEGRITY_APP
@@ -284,6 +286,8 @@ Properties on Targets
    /prop_tgt/LINK_WHAT_YOU_USE
    /prop_tgt/LOCATION_CONFIG
    /prop_tgt/LOCATION
+   /prop_tgt/MACHO_COMPATIBILITY_VERSION
+   /prop_tgt/MACHO_CURRENT_VERSION
    /prop_tgt/MACOSX_BUNDLE_INFO_PLIST
    /prop_tgt/MACOSX_BUNDLE
    /prop_tgt/MACOSX_FRAMEWORK_INFO_PLIST
@@ -302,8 +306,6 @@ Properties on Targets
    /prop_tgt/OBJCXX_STANDARD_REQUIRED
    /prop_tgt/OSX_ARCHITECTURES_CONFIG
    /prop_tgt/OSX_ARCHITECTURES
-   /prop_tgt/OSX_CURRENT_VERSION
-   /prop_tgt/OSX_COMPATIBILITY_VERSION
    /prop_tgt/OUTPUT_NAME_CONFIG
    /prop_tgt/OUTPUT_NAME
    /prop_tgt/PDB_NAME_CONFIG
@@ -374,6 +376,7 @@ Properties on Targets
    /prop_tgt/VS_SCC_PROJECTNAME
    /prop_tgt/VS_SCC_PROVIDER
    /prop_tgt/VS_SDK_REFERENCES
+   /prop_tgt/VS_SOLUTION_DEPLOY
    /prop_tgt/VS_USER_PROPS
    /prop_tgt/VS_WINDOWS_TARGET_PLATFORM_MIN_VERSION
    /prop_tgt/VS_WINRT_COMPONENT
@@ -388,7 +391,6 @@ Properties on Targets
    /prop_tgt/XCODE_SCHEME_ADDRESS_SANITIZER
    /prop_tgt/XCODE_SCHEME_ADDRESS_SANITIZER_USE_AFTER_RETURN
    /prop_tgt/XCODE_SCHEME_ARGUMENTS
-   /prop_tgt/XCODE_SCHEME_WORKING_DIRECTORY
    /prop_tgt/XCODE_SCHEME_DEBUG_AS_ROOT
    /prop_tgt/XCODE_SCHEME_DEBUG_DOCUMENT_VERSIONING
    /prop_tgt/XCODE_SCHEME_DISABLE_MAIN_THREAD_CHECKER
@@ -405,6 +407,7 @@ Properties on Targets
    /prop_tgt/XCODE_SCHEME_THREAD_SANITIZER_STOP
    /prop_tgt/XCODE_SCHEME_UNDEFINED_BEHAVIOUR_SANITIZER
    /prop_tgt/XCODE_SCHEME_UNDEFINED_BEHAVIOUR_SANITIZER_STOP
+   /prop_tgt/XCODE_SCHEME_WORKING_DIRECTORY
    /prop_tgt/XCODE_SCHEME_ZOMBIE_OBJECTS
    /prop_tgt/XCTEST
 

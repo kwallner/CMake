@@ -32,6 +32,7 @@
 #include "cmCustomCommandLines.h"
 #include "cmExecutionStatus.h"
 #include "cmExpandedCommandArgument.h" // IWYU pragma: keep
+#include "cmExportBuildFileGenerator.h"
 #include "cmFileLockPool.h"
 #include "cmFunctionBlocker.h"
 #include "cmGeneratedFileStream.h"
@@ -60,6 +61,7 @@
 #include "cmake.h"
 
 #ifndef CMAKE_BOOTSTRAP
+#  include "cmMakefileProfilingData.h"
 #  include "cmVariableWatch.h"
 #endif
 
@@ -372,19 +374,30 @@ void cmMakefile::PrintCommandTrace(const cmListFileFunction& lff) const
 class cmMakefileCall
 {
 public:
-  cmMakefileCall(cmMakefile* mf, cmCommandContext const& cc,
+  cmMakefileCall(cmMakefile* mf, cmListFileFunction const& lff,
                  cmExecutionStatus& status)
     : Makefile(mf)
   {
     cmListFileContext const& lfc = cmListFileContext::FromCommandContext(
-      cc, this->Makefile->StateSnapshot.GetExecutionListFile());
+      lff, this->Makefile->StateSnapshot.GetExecutionListFile());
     this->Makefile->Backtrace = this->Makefile->Backtrace.Push(lfc);
     ++this->Makefile->RecursionDepth;
     this->Makefile->ExecutionStatusStack.push_back(&status);
+#if !defined(CMAKE_BOOTSTRAP)
+    if (this->Makefile->GetCMakeInstance()->IsProfilingEnabled()) {
+      this->Makefile->GetCMakeInstance()->GetProfilingOutput().StartEntry(lff,
+                                                                          lfc);
+    }
+#endif
   }
 
   ~cmMakefileCall()
   {
+#if !defined(CMAKE_BOOTSTRAP)
+    if (this->Makefile->GetCMakeInstance()->IsProfilingEnabled()) {
+      this->Makefile->GetCMakeInstance()->GetProfilingOutput().StopEntry();
+    }
+#endif
     this->Makefile->ExecutionStatusStack.pop_back();
     --this->Makefile->RecursionDepth;
     this->Makefile->Backtrace = this->Makefile->Backtrace.Pop();
@@ -684,6 +697,27 @@ bool cmMakefile::ReadListFile(const std::string& filename)
   return true;
 }
 
+bool cmMakefile::ReadListFileAsString(const std::string& content,
+                                      const std::string& virtualFileName)
+{
+  std::string filenametoread = cmSystemTools::CollapseFullPath(
+    virtualFileName, this->GetCurrentSourceDirectory());
+
+  ListFileScope scope(this, filenametoread);
+
+  cmListFile listFile;
+  if (!listFile.ParseString(content.c_str(), virtualFileName.c_str(),
+                            this->GetMessenger(), this->Backtrace)) {
+    return false;
+  }
+
+  this->ReadListFile(listFile, filenametoread);
+  if (cmSystemTools::GetFatalErrorOccured()) {
+    scope.Quiet();
+  }
+  return true;
+}
+
 void cmMakefile::ReadListFile(cmListFile const& listFile,
                               std::string const& filenametoread)
 {
@@ -780,7 +814,7 @@ cmMakefile::GetEvaluationFiles() const
   return this->EvaluationFiles;
 }
 
-std::vector<cmExportBuildFileGenerator*>
+std::vector<std::unique_ptr<cmExportBuildFileGenerator>> const&
 cmMakefile::GetExportBuildFileGenerators() const
 {
   return this->ExportBuildFileGenerators;
@@ -789,16 +823,21 @@ cmMakefile::GetExportBuildFileGenerators() const
 void cmMakefile::RemoveExportBuildFileGeneratorCMP0024(
   cmExportBuildFileGenerator* gen)
 {
-  auto it = std::find(this->ExportBuildFileGenerators.begin(),
-                      this->ExportBuildFileGenerators.end(), gen);
+  auto it =
+    std::find_if(this->ExportBuildFileGenerators.begin(),
+                 this->ExportBuildFileGenerators.end(),
+                 [gen](std::unique_ptr<cmExportBuildFileGenerator> const& p) {
+                   return p.get() == gen;
+                 });
   if (it != this->ExportBuildFileGenerators.end()) {
     this->ExportBuildFileGenerators.erase(it);
   }
 }
 
-void cmMakefile::AddExportBuildFileGenerator(cmExportBuildFileGenerator* gen)
+void cmMakefile::AddExportBuildFileGenerator(
+  std::unique_ptr<cmExportBuildFileGenerator> gen)
 {
-  this->ExportBuildFileGenerators.push_back(gen);
+  this->ExportBuildFileGenerators.emplace_back(std::move(gen));
 }
 
 namespace {
@@ -3009,7 +3048,9 @@ MessageType cmMakefile::ExpandVariablesInStringNew(
               }
               break;
             case CACHE:
-              value = state->GetCacheEntryValue(lookup);
+              if (cmProp value2 = state->GetCacheEntryValue(lookup)) {
+                value = value2->c_str();
+              }
               break;
           }
           // Get the string we're meant to append to.
@@ -4492,7 +4533,7 @@ bool cmMakefile::SetPolicy(cmPolicies::PolicyID id,
 
   // Deprecate old policies, especially those that require a lot
   // of code to maintain the old behavior.
-  if (status == cmPolicies::OLD && id <= cmPolicies::CMP0069 &&
+  if (status == cmPolicies::OLD && id <= cmPolicies::CMP0071 &&
       !(this->GetCMakeInstance()->GetIsInTryCompile() &&
         (
           // Policies set by cmCoreTryCompile::TryCompileCode.

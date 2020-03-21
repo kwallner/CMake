@@ -9,6 +9,7 @@
 #include <initializer_list>
 #include <iostream>
 #include <sstream>
+#include <stdexcept>
 #include <utility>
 
 #include <cm/memory>
@@ -39,6 +40,9 @@
 #include "cmLinkLineComputer.h"
 #include "cmLocalGenerator.h"
 #include "cmMakefile.h"
+#if !defined(CMAKE_BOOTSTRAP)
+#  include "cmMakefileProfilingData.h"
+#endif
 #include "cmMessenger.h"
 #include "cmState.h"
 #include "cmStateDirectory.h"
@@ -614,6 +618,10 @@ void cmake::SetArgs(const std::vector<std::string>& args)
 {
   bool haveToolset = false;
   bool havePlatform = false;
+#if !defined(CMAKE_BOOTSTRAP)
+  std::string profilingFormat;
+  std::string profilingOutput;
+#endif
   for (unsigned int i = 1; i < args.size(); ++i) {
     std::string const& arg = args[i];
     if (arg.find("-H", 0) == 0 || arg.find("-S", 0) == 0) {
@@ -752,7 +760,8 @@ void cmake::SetArgs(const std::vector<std::string>& args)
       const auto traceFormat =
         StringToTraceFormat(arg.substr(strlen("--trace-format=")));
       if (traceFormat == TraceFormat::TRACE_UNDEFINED) {
-        cmSystemTools::Error("Invalid format specified for --trace-format");
+        cmSystemTools::Error("Invalid format specified for --trace-format. "
+                             "Valid formats are human, json-v1.");
         return;
       }
       this->SetTraceFormat(traceFormat);
@@ -840,6 +849,20 @@ void cmake::SetArgs(const std::vector<std::string>& args)
         return;
       }
       this->SetGlobalGenerator(std::move(gen));
+#if !defined(CMAKE_BOOTSTRAP)
+    } else if (arg.find("--profiling-format", 0) == 0) {
+      profilingFormat = arg.substr(strlen("--profiling-format="));
+      if (profilingFormat.empty()) {
+        cmSystemTools::Error("No format specified for --profiling-format");
+      }
+    } else if (arg.find("--profiling-output", 0) == 0) {
+      profilingOutput = arg.substr(strlen("--profiling-output="));
+      profilingOutput = cmSystemTools::CollapseFullPath(profilingOutput);
+      cmSystemTools::ConvertToUnixSlashes(profilingOutput);
+      if (profilingOutput.empty()) {
+        cmSystemTools::Error("No path specified for --profiling-output");
+      }
+#endif
     }
     // no option assume it is the path to the source or an existing build
     else {
@@ -856,6 +879,29 @@ void cmake::SetArgs(const std::vector<std::string>& args)
       }
     }
   }
+
+#if !defined(CMAKE_BOOTSTRAP)
+  if (!profilingOutput.empty() || !profilingFormat.empty()) {
+    if (profilingOutput.empty()) {
+      cmSystemTools::Error(
+        "--profiling-format specified but no --profiling-output!");
+      return;
+    }
+    if (profilingFormat == "google-trace") {
+      try {
+        this->ProfilingOutput =
+          cm::make_unique<cmMakefileProfilingData>(profilingOutput);
+      } catch (std::runtime_error& e) {
+        cmSystemTools::Error(
+          cmStrCat("Could not start profiling: ", e.what()));
+        return;
+      }
+    } else {
+      cmSystemTools::Error("Invalid format specified for --profiling-format");
+      return;
+    }
+  }
+#endif
 
   const bool haveSourceDir = !this->GetHomeDirectory().empty();
   const bool haveBinaryDir = !this->GetHomeOutputDirectory().empty();
@@ -1014,11 +1060,11 @@ void cmake::SetDirectoriesFromFile(const std::string& arg)
   // If there is a CMakeCache.txt file, use its settings.
   if (!cachePath.empty()) {
     if (this->LoadCache(cachePath)) {
-      const char* existingValue =
+      cmProp existingValue =
         this->State->GetCacheEntryValue("CMAKE_HOME_DIRECTORY");
       if (existingValue) {
         this->SetHomeOutputDirectory(cachePath);
-        this->SetHomeDirectory(existingValue);
+        this->SetHomeDirectory(*existingValue);
         return;
       }
     }
@@ -1363,7 +1409,7 @@ int cmake::HandleDeleteCacheVariables(const std::string& var)
     i++;
     save.value = *i;
     warning << *i << "\n";
-    const char* existingValue = this->State->GetCacheEntryValue(save.key);
+    cmProp existingValue = this->State->GetCacheEntryValue(save.key);
     if (existingValue) {
       save.type = this->State->GetCacheEntryType(save.key);
       if (const char* help =
@@ -1413,9 +1459,9 @@ int cmake::Configure()
   if (this->DiagLevels.count("dev") == 1) {
     bool setDeprecatedVariables = false;
 
-    const char* cachedWarnDeprecated =
+    cmProp cachedWarnDeprecated =
       this->State->GetCacheEntryValue("CMAKE_WARN_DEPRECATED");
-    const char* cachedErrorDeprecated =
+    cmProp cachedErrorDeprecated =
       this->State->GetCacheEntryValue("CMAKE_ERROR_DEPRECATED");
 
     // don't overwrite deprecated warning setting from a previous invocation
@@ -1454,17 +1500,17 @@ int cmake::Configure()
   // Cache variables may have already been set by a previous invocation,
   // so we cannot rely on command line options alone. Always ensure our
   // messenger is in sync with the cache.
-  const char* value = this->State->GetCacheEntryValue("CMAKE_WARN_DEPRECATED");
-  this->Messenger->SetSuppressDeprecatedWarnings(value && cmIsOff(value));
+  cmProp value = this->State->GetCacheEntryValue("CMAKE_WARN_DEPRECATED");
+  this->Messenger->SetSuppressDeprecatedWarnings(value && cmIsOff(*value));
 
   value = this->State->GetCacheEntryValue("CMAKE_ERROR_DEPRECATED");
-  this->Messenger->SetDeprecatedWarningsAsErrors(cmIsOn(value));
+  this->Messenger->SetDeprecatedWarningsAsErrors(value && cmIsOn(*value));
 
   value = this->State->GetCacheEntryValue("CMAKE_SUPPRESS_DEVELOPER_WARNINGS");
-  this->Messenger->SetSuppressDevWarnings(cmIsOn(value));
+  this->Messenger->SetSuppressDevWarnings(value && cmIsOn(*value));
 
   value = this->State->GetCacheEntryValue("CMAKE_SUPPRESS_DEVELOPER_ERRORS");
-  this->Messenger->SetDevWarningsAsErrors(value && cmIsOff(value));
+  this->Messenger->SetDevWarningsAsErrors(value && cmIsOff(*value));
 
   int ret = this->ActualConfigure();
   const char* delCacheVars =
@@ -2659,59 +2705,58 @@ int cmake::Build(int jobs, const std::string& dir,
     std::cerr << "Error: could not load cache\n";
     return 1;
   }
-  const char* cachedGenerator =
-    this->State->GetCacheEntryValue("CMAKE_GENERATOR");
+  cmProp cachedGenerator = this->State->GetCacheEntryValue("CMAKE_GENERATOR");
   if (!cachedGenerator) {
     std::cerr << "Error: could not find CMAKE_GENERATOR in Cache\n";
     return 1;
   }
-  auto gen = this->CreateGlobalGenerator(cachedGenerator);
+  auto gen = this->CreateGlobalGenerator(*cachedGenerator);
   if (!gen) {
-    std::cerr << "Error: could create CMAKE_GENERATOR \"" << cachedGenerator
+    std::cerr << "Error: could create CMAKE_GENERATOR \"" << *cachedGenerator
               << "\"\n";
     return 1;
   }
   this->SetGlobalGenerator(std::move(gen));
-  const char* cachedGeneratorInstance =
+  cmProp cachedGeneratorInstance =
     this->State->GetCacheEntryValue("CMAKE_GENERATOR_INSTANCE");
   if (cachedGeneratorInstance) {
     cmMakefile mf(this->GetGlobalGenerator(), this->GetCurrentSnapshot());
-    if (!this->GlobalGenerator->SetGeneratorInstance(cachedGeneratorInstance,
+    if (!this->GlobalGenerator->SetGeneratorInstance(*cachedGeneratorInstance,
                                                      &mf)) {
       return 1;
     }
   }
-  const char* cachedGeneratorPlatform =
+  cmProp cachedGeneratorPlatform =
     this->State->GetCacheEntryValue("CMAKE_GENERATOR_PLATFORM");
   if (cachedGeneratorPlatform) {
     cmMakefile mf(this->GetGlobalGenerator(), this->GetCurrentSnapshot());
-    if (!this->GlobalGenerator->SetGeneratorPlatform(cachedGeneratorPlatform,
+    if (!this->GlobalGenerator->SetGeneratorPlatform(*cachedGeneratorPlatform,
                                                      &mf)) {
       return 1;
     }
   }
-  const char* cachedGeneratorToolset =
+  cmProp cachedGeneratorToolset =
     this->State->GetCacheEntryValue("CMAKE_GENERATOR_TOOLSET");
   if (cachedGeneratorToolset) {
     cmMakefile mf(this->GetGlobalGenerator(), this->GetCurrentSnapshot());
-    if (!this->GlobalGenerator->SetGeneratorToolset(cachedGeneratorToolset,
+    if (!this->GlobalGenerator->SetGeneratorToolset(*cachedGeneratorToolset,
                                                     true, &mf)) {
       return 1;
     }
   }
   std::string output;
   std::string projName;
-  const char* cachedProjectName =
+  cmProp cachedProjectName =
     this->State->GetCacheEntryValue("CMAKE_PROJECT_NAME");
   if (!cachedProjectName) {
     std::cerr << "Error: could not find CMAKE_PROJECT_NAME in Cache\n";
     return 1;
   }
-  projName = cachedProjectName;
+  projName = *cachedProjectName;
 
-  const char* cachedVerbose =
+  cmProp cachedVerbose =
     this->State->GetCacheEntryValue("CMAKE_VERBOSE_MAKEFILE");
-  if (cmIsOn(cachedVerbose)) {
+  if (cachedVerbose && cmIsOn(*cachedVerbose)) {
     verbose = true;
   }
 
@@ -2770,6 +2815,10 @@ int cmake::Build(int jobs, const std::string& dir,
   }
 #endif
 
+  if (!this->GlobalGenerator->ReadCacheEntriesForBuild(*this->State)) {
+    return 1;
+  }
+
   this->GlobalGenerator->PrintBuildCommandAdvice(std::cerr, jobs);
   return this->GlobalGenerator->Build(
     jobs, "", dir, projName, targets, output, "", config, clean, false,
@@ -2791,7 +2840,7 @@ bool cmake::Open(const std::string& dir, bool dryRun)
     std::cerr << "Error: could not load cache\n";
     return false;
   }
-  const char* genName = this->State->GetCacheEntryValue("CMAKE_GENERATOR");
+  cmProp genName = this->State->GetCacheEntryValue("CMAKE_GENERATOR");
   if (!genName) {
     std::cerr << "Error: could not find CMAKE_GENERATOR in Cache\n";
     return false;
@@ -2800,7 +2849,7 @@ bool cmake::Open(const std::string& dir, bool dryRun)
     this->State->GetInitializedCacheValue("CMAKE_EXTRA_GENERATOR");
   std::string fullName =
     cmExternalMakefileProjectGenerator::CreateFullGeneratorName(
-      genName, extraGenName ? *extraGenName : "");
+      *genName, extraGenName ? *extraGenName : "");
 
   std::unique_ptr<cmGlobalGenerator> gen =
     this->CreateGlobalGenerator(fullName);
@@ -2810,14 +2859,14 @@ bool cmake::Open(const std::string& dir, bool dryRun)
     return false;
   }
 
-  const char* cachedProjectName =
+  cmProp cachedProjectName =
     this->State->GetCacheEntryValue("CMAKE_PROJECT_NAME");
   if (!cachedProjectName) {
     std::cerr << "Error: could not find CMAKE_PROJECT_NAME in Cache\n";
     return false;
   }
 
-  return gen->Open(dir, cachedProjectName, dryRun);
+  return gen->Open(dir, *cachedProjectName, dryRun);
 }
 
 void cmake::WatchUnusedCli(const std::string& var)
@@ -2951,3 +3000,15 @@ void cmake::SetDeprecatedWarningsAsErrors(bool b)
                       " and functions.",
                       cmStateEnums::INTERNAL);
 }
+
+#if !defined(CMAKE_BOOTSTRAP)
+cmMakefileProfilingData& cmake::GetProfilingOutput()
+{
+  return *(this->ProfilingOutput);
+}
+
+bool cmake::IsProfilingEnabled() const
+{
+  return static_cast<bool>(this->ProfilingOutput);
+}
+#endif

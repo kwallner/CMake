@@ -30,6 +30,8 @@ class cmStateSnapshot;
 class cmMessenger;
 class cmExecutionStatus;
 
+using cmProp = const std::string*;
+
 class cmState
 {
   friend class cmStateSnapshot;
@@ -87,7 +89,8 @@ public:
   bool DeleteCache(const std::string& path);
 
   std::vector<std::string> GetCacheEntryKeys() const;
-  const char* GetCacheEntryValue(std::string const& key) const;
+  cmProp GetCacheEntryValue(std::string const& key) const;
+  std::string GetSafeCacheEntryValue(std::string const& key) const;
   const std::string* GetInitializedCacheValue(std::string const& key) const;
   cmStateEnums::CacheEntryType GetCacheEntryType(std::string const& key) const;
   void SetCacheEntryValue(std::string const& key, std::string const& value);
@@ -120,8 +123,8 @@ public:
   cmStateSnapshot Reset();
   // Define a property
   void DefineProperty(const std::string& name, cmProperty::ScopeType scope,
-                      const char* ShortDescription,
-                      const char* FullDescription, bool chain = false);
+                      const std::string& ShortDescription,
+                      const std::string& FullDescription, bool chain = false);
 
   // get property definition
   cmPropertyDefinition const* GetPropertyDefinition(

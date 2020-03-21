@@ -981,17 +981,11 @@ void cmVisualStudio10TargetGenerator::WriteEmbeddedResourceGroup(Elem& e0)
         // If the resource was NOT added using a relative path (which should
         // be the default), we have to provide a link here
         if (!useRelativePath) {
-          std::string link;
-          if (obj.find(srcDir) == 0) {
-            link = obj.substr(srcDir.length() + 1);
-          } else if (obj.find(binDir) == 0) {
-            link = obj.substr(binDir.length() + 1);
-          } else {
+          std::string link = this->GetCSharpSourceLink(oi);
+          if (link.empty()) {
             link = cmsys::SystemTools::GetFilenameName(obj);
           }
-          if (!link.empty()) {
-            e2.Element("Link", link);
-          }
+          e2.Element("Link", link);
         }
         // Determine if this is a generated resource from a .Designer.cs file
         std::string designerResource =
@@ -1023,7 +1017,7 @@ void cmVisualStudio10TargetGenerator::WriteEmbeddedResourceGroup(Elem& e0)
           if (p.find(propNamePrefix) == 0) {
             std::string tagName = p.substr(propNamePrefix.length());
             if (!tagName.empty()) {
-              std::string value = props.GetPropertyValue(p);
+              const std::string& value = *props.GetPropertyValue(p);
               if (!value.empty()) {
                 e2.Element(tagName, value);
               }
@@ -1054,25 +1048,6 @@ void cmVisualStudio10TargetGenerator::WriteXamlFilesGroup(Elem& e0)
       Elem e2(e1, xamlType);
       this->WriteSource(e2, oi);
       e2.SetHasElements();
-      if (this->ProjectType == csproj && !this->InSourceBuild) {
-        // add <Link> tag to written XAML source if necessary
-        const std::string& srcDir =
-          this->Makefile->GetCurrentSourceDirectory();
-        const std::string& binDir =
-          this->Makefile->GetCurrentBinaryDirectory();
-        std::string link;
-        if (obj.find(srcDir) == 0) {
-          link = obj.substr(srcDir.length() + 1);
-        } else if (obj.find(binDir) == 0) {
-          link = obj.substr(binDir.length() + 1);
-        } else {
-          link = cmsys::SystemTools::GetFilenameName(obj);
-        }
-        if (!link.empty()) {
-          ConvertToWindowsSlash(link);
-          e2.Element("Link", link);
-        }
-      }
       e2.Element("SubType", "Designer");
     }
   }
@@ -1442,13 +1417,8 @@ void cmVisualStudio10TargetGenerator::WriteCustomRule(
   } else {
     Elem e1(e0, "ItemGroup");
     Elem e2(e1, "None");
-    std::string link;
-    this->GetCSharpSourceLink(source, link);
     this->WriteSource(e2, source);
     e2.SetHasElements();
-    if (!link.empty()) {
-      e2.Element("Link", link);
-    }
   }
   for (std::string const& c : this->Configurations) {
     cmCustomCommandGenerator ccg(command, c, lg);
@@ -1805,30 +1775,8 @@ void cmVisualStudio10TargetGenerator::WriteExtraSource(Elem& e1,
   std::string copyToOutDir;
   std::string includeInVsix;
   std::string ext = cmSystemTools::LowerCase(sf->GetExtension());
-  if (this->ProjectType == csproj) {
-    // EVERY extra source file must have a <Link>, otherwise it might not
-    // be visible in Visual Studio at all. The path relative to current
-    // source- or binary-dir is used within the link, if the file is
-    // in none of these paths, it is added with the plain filename without
-    // any path. This means the file will show up at root-level of the csproj
-    // (where CMakeLists.txt etc. are).
-    if (!this->InSourceBuild) {
-      toolHasSettings = true;
-      std::string fullFileName = sf->GetFullPath();
-      std::string srcDir = this->Makefile->GetCurrentSourceDirectory();
-      std::string binDir = this->Makefile->GetCurrentBinaryDirectory();
-      if (fullFileName.find(binDir) != std::string::npos) {
-        sourceLink.clear();
-      } else if (fullFileName.find(srcDir) != std::string::npos) {
-        sourceLink = fullFileName.substr(srcDir.length() + 1);
-      } else {
-        // fallback: add plain filename without any path
-        sourceLink = cmsys::SystemTools::GetFilenameName(fullFileName);
-      }
-      if (!sourceLink.empty()) {
-        ConvertToWindowsSlash(sourceLink);
-      }
-    }
+  if (this->ProjectType == csproj && !this->InSourceBuild) {
+    toolHasSettings = true;
   }
   if (ext == "hlsl") {
     tool = "FXCompile";
@@ -2047,9 +1995,6 @@ void cmVisualStudio10TargetGenerator::WriteExtraSource(Elem& e1,
     if (!settingsLastGenOutput.empty()) {
       e2.Element("LastGenOutput", settingsLastGenOutput);
     }
-    if (!sourceLink.empty()) {
-      e2.Element("Link", sourceLink);
-    }
     if (!subType.empty()) {
       e2.Element("SubType", subType);
     }
@@ -2102,6 +2047,20 @@ void cmVisualStudio10TargetGenerator::WriteSource(Elem& e2,
   ConvertToWindowsSlash(sourceFile);
   e2.Attribute("Include", sourceFile);
 
+  if (this->ProjectType == csproj && !this->InSourceBuild) {
+    // For out of source projects we have to provide a link (if not specified
+    // via property) for every source file (besides .cs files) otherwise they
+    // will not be visible in VS at all.
+    // First we check if the file is in a source group, then we check if the
+    // file path is relative to current source- or binary-dir, otherwise it is
+    // added with the plain filename without any path. This means the file will
+    // show up at root-level of the csproj (where CMakeLists.txt etc. are).
+    std::string link = this->GetCSharpSourceLink(sf);
+    if (link.empty())
+      link = cmsys::SystemTools::GetFilenameName(sf->GetFullPath());
+    e2.Element("Link", link);
+  }
+
   ToolSource toolSource = { sf, forceRelative };
   this->Tools[e2.Tag].push_back(toolSource);
 }
@@ -2115,9 +2074,7 @@ void cmVisualStudio10TargetGenerator::WriteAllSources(Elem& e0)
   const bool haveUnityBuild =
     this->GeneratorTarget->GetPropertyAsBool("UNITY_BUILD");
 
-  if (haveUnityBuild &&
-      this->GlobalGenerator->GetVersion() >=
-        cmGlobalVisualStudioGenerator::VS15) {
+  if (haveUnityBuild && this->GlobalGenerator->GetSupportsUnityBuilds()) {
     Elem e1(e0, "PropertyGroup");
     e1.Element("EnableUnitySupport", "true");
   }
@@ -2223,9 +2180,7 @@ void cmVisualStudio10TargetGenerator::WriteAllSources(Elem& e0)
       this->WriteSource(e2, si.Source);
 
       bool useNativeUnityBuild = false;
-      if (haveUnityBuild &&
-          this->GlobalGenerator->GetVersion() >=
-            cmGlobalVisualStudioGenerator::VS15) {
+      if (haveUnityBuild && this->GlobalGenerator->GetSupportsUnityBuilds()) {
         // Magic value taken from cmGlobalVisualStudioVersionedGenerator.cxx
         static const std::string vs15 = "141";
         std::string toolset =
@@ -2252,7 +2207,7 @@ void cmVisualStudio10TargetGenerator::WriteAllSources(Elem& e0)
             si.Source->GetProperty("UNITY_SOURCE_FILE"));
           e2.Attribute("UnityFilesDirectory", unityDir);
         } else {
-          // Visual Studio versions prior to 2017 do not know about unity
+          // Visual Studio versions prior to 2017 15.8 do not know about unity
           // builds, thus we exclude the files alredy part of unity sources.
           if (!si.Source->GetPropertyAsBool("SKIP_UNITY_BUILD_INCLUSION")) {
             exclude_configs = si.Configs;
@@ -2465,12 +2420,6 @@ void cmVisualStudio10TargetGenerator::OutputSourceSpecificFlags(
     std::string f = source->GetFullPath();
     using CsPropMap = std::map<std::string, std::string>;
     CsPropMap sourceFileTags;
-    // set <Link> tag if necessary
-    std::string link;
-    this->GetCSharpSourceLink(source, link);
-    if (!link.empty()) {
-      sourceFileTags["Link"] = link;
-    }
     this->GetCSharpSourceProperties(&sf, sourceFileTags);
     // write source file specific tags
     if (!sourceFileTags.empty()) {
@@ -3263,13 +3212,13 @@ bool cmVisualStudio10TargetGenerator::ComputeCudaLinkOptions(
 
       if (l.IsPath) {
         std::string path = this->LocalGenerator->MaybeConvertToRelativePath(
-          currentBinDir, l.Value);
+          currentBinDir, l.Value.Value);
         ConvertToWindowsSlash(path);
-        if (!cmVS10IsTargetsFile(l.Value)) {
+        if (!cmVS10IsTargetsFile(l.Value.Value)) {
           libVec.push_back(path);
         }
       } else {
-        libVec.push_back(l.Value);
+        libVec.push_back(l.Value.Value);
       }
     }
 
@@ -3823,9 +3772,9 @@ bool cmVisualStudio10TargetGenerator::ComputeLibOptions(
   std::string currentBinDir =
     this->LocalGenerator->GetCurrentBinaryDirectory();
   for (cmComputeLinkInformation::Item const& l : libs) {
-    if (l.IsPath && cmVS10IsTargetsFile(l.Value)) {
+    if (l.IsPath && cmVS10IsTargetsFile(l.Value.Value)) {
       std::string path = this->LocalGenerator->MaybeConvertToRelativePath(
-        currentBinDir, l.Value);
+        currentBinDir, l.Value.Value);
       ConvertToWindowsSlash(path);
       this->AddTargetsFileAndConfigPair(path, config);
     }
@@ -3909,16 +3858,16 @@ void cmVisualStudio10TargetGenerator::AddLibraries(
 
     if (l.IsPath) {
       std::string path = this->LocalGenerator->MaybeConvertToRelativePath(
-        currentBinDir, l.Value);
+        currentBinDir, l.Value.Value);
       ConvertToWindowsSlash(path);
-      if (cmVS10IsTargetsFile(l.Value)) {
+      if (cmVS10IsTargetsFile(l.Value.Value)) {
         vsTargetVec.push_back(path);
       } else {
         libVec.push_back(path);
       }
     } else if (!l.Target ||
                l.Target->GetType() != cmStateEnums::INTERFACE_LIBRARY) {
-      libVec.push_back(l.Value);
+      libVec.push_back(l.Value.Value);
     }
   }
 }
@@ -4853,7 +4802,7 @@ void cmVisualStudio10TargetGenerator::GetCSharpSourceProperties(
       if (p.find(propNamePrefix) == 0) {
         std::string tagName = p.substr(propNamePrefix.length());
         if (!tagName.empty()) {
-          const std::string val = props.GetPropertyValue(p);
+          const std::string& val = *props.GetPropertyValue(p);
           if (!val.empty()) {
             tags[tagName] = val;
           } else {
@@ -4873,24 +4822,34 @@ void cmVisualStudio10TargetGenerator::WriteCSharpSourceProperties(
   }
 }
 
-void cmVisualStudio10TargetGenerator::GetCSharpSourceLink(
-  cmSourceFile const* sf, std::string& link)
+std::string cmVisualStudio10TargetGenerator::GetCSharpSourceLink(
+  cmSourceFile const* source)
 {
-  std::string const& sourceFilePath = sf->GetFullPath();
-  std::string const& binaryDir = LocalGenerator->GetCurrentBinaryDirectory();
-
-  if (!cmSystemTools::IsSubDirectory(sourceFilePath, binaryDir)) {
-    const std::string& stripFromPath =
-      this->Makefile->GetCurrentSourceDirectory();
-    if (sourceFilePath.find(stripFromPath) == 0) {
-      if (const char* l = sf->GetProperty("VS_CSHARP_Link")) {
-        link = l;
-      } else {
-        link = sourceFilePath.substr(stripFromPath.length() + 1);
-      }
-      ConvertToWindowsSlash(link);
-    }
+  // For out of source files, we first check if a matching source group
+  // for this file exists, otherwise we check if the path relative to current
+  // source- or binary-dir is used within the link and return that
+  std::string link;
+  std::string const& fullFileName = source->GetFullPath();
+  std::string const& srcDir = this->Makefile->GetCurrentSourceDirectory();
+  std::string const& binDir = this->Makefile->GetCurrentBinaryDirectory();
+  // unfortunately we have to copy the source groups, because
+  // FindSourceGroup uses a regex which is modifying the group
+  std::vector<cmSourceGroup> sourceGroups = this->Makefile->GetSourceGroups();
+  cmSourceGroup* sourceGroup =
+    this->Makefile->FindSourceGroup(fullFileName, sourceGroups);
+  if (sourceGroup && !sourceGroup->GetFullName().empty()) {
+    link = sourceGroup->GetFullName() + "/" +
+      cmsys::SystemTools::GetFilenameName(fullFileName);
+  } else if (fullFileName.find(srcDir) == 0) {
+    link = fullFileName.substr(srcDir.length() + 1);
+  } else if (fullFileName.find(binDir) == 0) {
+    link = fullFileName.substr(binDir.length() + 1);
+  } else if (const char* l = source->GetProperty("VS_CSHARP_Link")) {
+    link = l;
   }
+
+  ConvertToWindowsSlash(link);
+  return link;
 }
 
 std::string cmVisualStudio10TargetGenerator::GetCMakeFilePath(

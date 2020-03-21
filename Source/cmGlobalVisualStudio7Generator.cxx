@@ -128,7 +128,7 @@ void cmGlobalVisualStudio7Generator::EnableLanguage(
   // does not know about.
   std::string extraPath;
   if (cmSystemTools::GetEnv("CMAKE_MSVCIDE_RUN_PATH", extraPath)) {
-    mf->AddCacheDefinition("CMAKE_MSVCIDE_RUN_PATH", extraPath.c_str(),
+    mf->AddCacheDefinition("CMAKE_MSVCIDE_RUN_PATH", extraPath,
                            "Saved environment variable CMAKE_MSVCIDE_RUN_PATH",
                            cmStateEnums::STATIC);
   }
@@ -676,7 +676,8 @@ std::set<std::string> cmGlobalVisualStudio7Generator::IsPartOfDefaultBuild(
         for (std::string const& i : configs) {
           const char* propertyValue =
             target->Target->GetMakefile()->GetDefinition(propertyName);
-          if (cmIsOn(cmGeneratorExpression::Evaluate(
+          if (propertyValue &&
+              cmIsOn(cmGeneratorExpression::Evaluate(
                 propertyValue, target->GetLocalGenerator(), i))) {
             activeConfigs.insert(i);
           }

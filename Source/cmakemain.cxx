@@ -93,6 +93,12 @@ const char* cmDocumentationOptions[][2] = {
   { "--check-system-vars",
     "Find problems with variable usage in system "
     "files." },
+#  if !defined(CMAKE_BOOTSTRAP)
+  { "--profiling-format=<fmt>", "Output data for profiling CMake scripts." },
+  { "--profiling-output=<file>",
+    "Select an output path for the profiling data enabled through "
+    "--profiling-format." },
+#  endif
   { nullptr, nullptr }
 };
 
@@ -295,7 +301,7 @@ int do_cmake(int ac, char const* const* av)
                       << std::endl;
           }
           std::cout << k << ":" << cmState::CacheEntryTypeToString(t) << "="
-                    << cm.GetState()->GetCacheEntryValue(k) << std::endl;
+                    << cm.GetState()->GetSafeCacheEntryValue(k) << std::endl;
           if (list_help) {
             std::cout << std::endl;
           }
@@ -350,7 +356,7 @@ int do_build(int ac, char const* const* av)
 #else
   int jobs = cmake::NO_BUILD_PARALLEL_LEVEL;
   std::vector<std::string> targets;
-  std::string config = "Debug";
+  std::string config;
   std::string dir;
   std::vector<std::string> nativeOptions;
   bool cleanFirst = false;

@@ -156,9 +156,10 @@ public:
    * name as would be specified to the ADD_EXECUTABLE or UTILITY_SOURCE
    * commands. It is not a full path nor does it have an extension.
    */
-  void AddUtility(std::string const& name, cmMakefile* mf = nullptr);
+  void AddUtility(std::string const& name, bool cross,
+                  cmMakefile* mf = nullptr);
   //! Get the utilities used by this target
-  std::set<BT<std::string>> const& GetUtilities() const;
+  std::set<BT<std::pair<std::string, bool>>> const& GetUtilities() const;
 
   //! Set/Get a property of this target file
   void SetProperty(const std::string& prop, const char* value);
@@ -190,8 +191,8 @@ public:
   bool IsImportedGloballyVisible() const;
   bool IsPerConfig() const;
 
-  bool GetMappedConfig(std::string const& desired_config, const char** loc,
-                       const char** imp, std::string& suffix) const;
+  bool GetMappedConfig(std::string const& desired_config, const char*& loc,
+                       const char*& imp, std::string& suffix) const;
 
   //! Return whether this target is an executable with symbol exports enabled.
   bool IsExecutableWithExports() const;

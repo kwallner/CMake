@@ -117,6 +117,9 @@ public:
 
   bool ReadListFile(const std::string& filename);
 
+  bool ReadListFileAsString(const std::string& content,
+                            const std::string& virtualFileName);
+
   bool ReadDependentFile(const std::string& filename,
                          bool noPolicyScope = true);
 
@@ -314,6 +317,12 @@ public:
   void AddCacheDefinition(const std::string& name, const char* value,
                           const char* doc, cmStateEnums::CacheEntryType type,
                           bool force = false);
+  void AddCacheDefinition(const std::string& name, const std::string& value,
+                          const char* doc, cmStateEnums::CacheEntryType type,
+                          bool force = false)
+  {
+    AddCacheDefinition(name, value.c_str(), doc, type, force);
+  }
 
   /**
    * Remove a variable definition from the build.  This is not valid
@@ -945,10 +954,11 @@ public:
   const std::vector<std::unique_ptr<cmGeneratorExpressionEvaluationFile>>&
   GetEvaluationFiles() const;
 
-  std::vector<cmExportBuildFileGenerator*> GetExportBuildFileGenerators()
-    const;
+  std::vector<std::unique_ptr<cmExportBuildFileGenerator>> const&
+  GetExportBuildFileGenerators() const;
   void RemoveExportBuildFileGeneratorCMP0024(cmExportBuildFileGenerator* gen);
-  void AddExportBuildFileGenerator(cmExportBuildFileGenerator* gen);
+  void AddExportBuildFileGenerator(
+    std::unique_ptr<cmExportBuildFileGenerator> gen);
 
   // Maintain a stack of package roots to allow nested PACKAGE_ROOT_PATH
   // searches
@@ -1053,7 +1063,8 @@ private:
   mutable cmsys::RegularExpression cmNamedCurly;
 
   std::vector<cmMakefile*> UnConfiguredDirectories;
-  std::vector<cmExportBuildFileGenerator*> ExportBuildFileGenerators;
+  std::vector<std::unique_ptr<cmExportBuildFileGenerator>>
+    ExportBuildFileGenerators;
 
   std::vector<std::unique_ptr<cmGeneratorExpressionEvaluationFile>>
     EvaluationFiles;

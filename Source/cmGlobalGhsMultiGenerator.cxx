@@ -9,6 +9,7 @@
 #include <utility>
 
 #include <cm/memory>
+#include <cm/string>
 
 #include "cmAlgorithms.h"
 #include "cmDocumentationEntry.h"
@@ -90,7 +91,7 @@ bool cmGlobalGhsMultiGenerator::SetGeneratorToolset(std::string const& ts,
     /* store the full toolset for later use
      * -- already done if -T<toolset> was specified
      */
-    mf->AddCacheDefinition("CMAKE_GENERATOR_TOOLSET", tsp.c_str(),
+    mf->AddCacheDefinition("CMAKE_GENERATOR_TOOLSET", tsp,
                            "Location of generator toolset.",
                            cmStateEnums::INTERNAL);
   }
@@ -112,8 +113,8 @@ bool cmGlobalGhsMultiGenerator::SetGeneratorToolset(std::string const& ts,
   }
 
   /* store the toolset that is being used for this build */
-  mf->AddCacheDefinition("CMAKE_MAKE_PROGRAM", gbuild.c_str(),
-                         "build program to use", cmStateEnums::INTERNAL, true);
+  mf->AddCacheDefinition("CMAKE_MAKE_PROGRAM", gbuild, "build program to use",
+                         cmStateEnums::INTERNAL, true);
 
   mf->AddDefinition("CMAKE_SYSTEM_VERSION", tsp);
 
@@ -132,7 +133,7 @@ bool cmGlobalGhsMultiGenerator::SetGeneratorPlatform(std::string const& p,
     /* store the platform name for later use
      * -- already done if -A<arch> was specified
      */
-    mf->AddCacheDefinition("CMAKE_GENERATOR_PLATFORM", arch.c_str(),
+    mf->AddCacheDefinition("CMAKE_GENERATOR_PLATFORM", arch,
                            "Name of generator platform.",
                            cmStateEnums::INTERNAL);
   } else {
@@ -166,7 +167,7 @@ bool cmGlobalGhsMultiGenerator::SetGeneratorPlatform(std::string const& p,
   if (cmIsOff(bspName) && platform.find("integrity") != std::string::npos) {
     bspName = "sim" + arch;
     /* write back the calculate name for next time */
-    mf->AddCacheDefinition("GHS_BSP_NAME", bspName.c_str(),
+    mf->AddCacheDefinition("GHS_BSP_NAME", bspName,
                            "Name of GHS target platform.",
                            cmStateEnums::STRING, true);
     std::string m = cmStrCat(
@@ -651,21 +652,16 @@ void cmGlobalGhsMultiGenerator::WriteHighLevelDirectives(
   char const* const customization =
     this->GetCMakeInstance()->GetCacheDefinition("GHS_CUSTOMIZATION");
   if (nullptr != customization && strlen(customization) > 0) {
-    fout << "customization=" << this->TrimQuotes(customization) << std::endl;
+    fout << "customization="
+         << cmGlobalGhsMultiGenerator::TrimQuotes(customization) << std::endl;
     this->GetCMakeInstance()->MarkCliAsUsed("GHS_CUSTOMIZATION");
   }
 }
 
-std::string cmGlobalGhsMultiGenerator::TrimQuotes(std::string const& str)
+std::string cmGlobalGhsMultiGenerator::TrimQuotes(std::string str)
 {
-  std::string result;
-  result.reserve(str.size());
-  for (const char* ch = str.c_str(); *ch != '\0'; ++ch) {
-    if (*ch != '"') {
-      result += *ch;
-    }
-  }
-  return result;
+  cm::erase(str, '"');
+  return str;
 }
 
 bool cmGlobalGhsMultiGenerator::TargetCompare::operator()(

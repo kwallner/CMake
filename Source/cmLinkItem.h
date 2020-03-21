@@ -24,10 +24,11 @@ class cmLinkItem
 
 public:
   cmLinkItem();
-  cmLinkItem(std::string s, cmListFileBacktrace bt);
-  cmLinkItem(cmGeneratorTarget const* t, cmListFileBacktrace bt);
+  cmLinkItem(std::string s, bool c, cmListFileBacktrace bt);
+  cmLinkItem(cmGeneratorTarget const* t, bool c, cmListFileBacktrace bt);
   std::string const& AsStr() const;
   cmGeneratorTarget const* Target = nullptr;
+  bool Cross = false;
   cmListFileBacktrace Backtrace;
   friend bool operator<(cmLinkItem const& l, cmLinkItem const& r);
   friend bool operator==(cmLinkItem const& l, cmLinkItem const& r);
@@ -80,6 +81,9 @@ struct cmLinkInterface : public cmLinkInterfaceLibraries
   std::vector<cmLinkItem> WrongConfigLibraries;
 
   bool ImplementationIsInterface = false;
+
+  // Whether the list depends on a link language genex.
+  bool HadLinkLanguageSensitiveCondition = false;
 };
 
 struct cmOptionalLinkInterface : public cmLinkInterface
@@ -99,6 +103,9 @@ struct cmLinkImplementation : public cmLinkImplementationLibraries
 {
   // Languages whose runtime libraries must be linked.
   std::vector<std::string> Languages;
+
+  // Whether the list depends on a link language genex.
+  bool HadLinkLanguageSensitiveCondition = false;
 };
 
 // Cache link implementation computation from each configuration.

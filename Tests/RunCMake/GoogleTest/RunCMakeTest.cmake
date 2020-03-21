@@ -27,7 +27,7 @@ function(run_GoogleTest)
   )
 
   set(RunCMake_TEST_OUTPUT_MERGE 1)
-  run_cmake_command(GoogleTest-discovery-timeout
+  run_cmake_command(GoogleTest-discovery-timeout-build
     ${CMAKE_COMMAND}
     --build .
     --config Debug
@@ -69,6 +69,41 @@ function(run_GoogleTest)
     -R property_timeout\\.case_with_discovery
     --no-label-summary
   )
+
+  run_cmake_command(GoogleTest-discovery-timeout-test
+    ${CMAKE_CTEST_COMMAND}
+    -C Debug
+    -R discovery_timeout_test
+    --no-label-summary
+  )
+endfunction()
+
+function(run_GoogleTestXML)
+  # Use a single build tree for a few tests without cleaning.
+  set(RunCMake_TEST_BINARY_DIR ${RunCMake_BINARY_DIR}/GoogleTestXML-build)
+  set(RunCMake_TEST_NO_CLEAN 1)
+  if(NOT RunCMake_GENERATOR_IS_MULTI_CONFIG)
+    set(RunCMake_TEST_OPTIONS -DCMAKE_BUILD_TYPE=Debug)
+  endif()
+  file(REMOVE_RECURSE "${RunCMake_TEST_BINARY_DIR}")
+  file(MAKE_DIRECTORY "${RunCMake_TEST_BINARY_DIR}")
+
+  run_cmake(GoogleTestXML)
+
+  run_cmake_command(GoogleTestXML-discovery
+  ${CMAKE_COMMAND}
+  --build .
+  --config Debug
+  --target xml_output
+  )
+
+  run_cmake_command(GoogleTestXML-result
+  ${CMAKE_CTEST_COMMAND}
+  -C Debug
+  -R GoogleTestXML
+  --no-label-summary
+  )
 endfunction()
 
 run_GoogleTest()
+run_GoogleTestXML()

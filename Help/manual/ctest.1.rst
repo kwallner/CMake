@@ -370,6 +370,14 @@ See `Build and Test Mode`_.
  This option will not run any tests, it will simply print the list of
  all labels associated with the test set.
 
+``--no-tests=<[error|ignore]>``
+ Regard no tests found either as error or ignore it.
+
+ If no tests were found, the default behavior of CTest is to always log an
+ error message but to return an error code in script mode only.  This option
+ unifies the behavior of CTest by either returning an error code if no tests
+ were found or by ignoring it.
+
 .. include:: OPTIONS_HELP.txt
 
 .. _`Label and Subproject Summary`:
@@ -1322,6 +1330,15 @@ in a fine-grained way, and for users to specify the resources availiable on
 the running machine. This allows CTest to internally keep track of which
 resources are in use and which are free, scheduling tests in a way that
 prevents them from trying to claim resources that are not available.
+
+When the resource allocation feature is used, CTest will not oversubscribe
+resources. For example, if a resource has 8 slots, CTest will not run tests
+that collectively use more than 8 slots at a time. This has the effect of
+limiting how many tests can run at any given time, even if a high ``-j``
+argument is used, if those tests all use some slots from the same resource.
+In addition, it means that a single test that uses more of a resource than is
+available on a machine will not run at all (and will be reported as
+``Not Run``).
 
 A common use case for this feature is for tests that require the use of a GPU.
 Multiple tests can simultaneously allocate memory from a GPU, but if too many

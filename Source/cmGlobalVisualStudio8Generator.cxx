@@ -211,7 +211,7 @@ void cmGlobalVisualStudio8Generator::AddExtraIDETargets()
       // All targets depend on the build-system check target.
       for (const auto& ti : tgts) {
         if (ti->GetName() != CMAKE_CHECK_BUILD_SYSTEM_TARGET) {
-          ti->Target->AddUtility(CMAKE_CHECK_BUILD_SYSTEM_TARGET);
+          ti->Target->AddUtility(CMAKE_CHECK_BUILD_SYSTEM_TARGET, false);
         }
       }
     }
@@ -275,23 +275,31 @@ void cmGlobalVisualStudio8Generator::WriteProjectConfigurations(
 bool cmGlobalVisualStudio8Generator::NeedsDeploy(
   cmGeneratorTarget const& target, const char* config) const
 {
-  cmStateEnums::TargetType type = target.GetType();
-  bool noDeploy = DeployInhibited(target, config);
-  return !noDeploy &&
-    (type == cmStateEnums::EXECUTABLE ||
-     type == cmStateEnums::SHARED_LIBRARY) &&
-    this->TargetSystemSupportsDeployment();
-}
+  cmStateEnums::TargetType const type = target.GetType();
+  if (type != cmStateEnums::EXECUTABLE &&
+      type != cmStateEnums::SHARED_LIBRARY) {
+    // deployment only valid on executables and shared libraries.
+    return false;
+  }
 
-bool cmGlobalVisualStudio8Generator::DeployInhibited(
-  cmGeneratorTarget const& target, const char* config) const
-{
-  bool rVal = false;
-  if (const char* prop = target.GetProperty("VS_NO_SOLUTION_DEPLOY")) {
-    rVal = cmIsOn(
+  if (const char* prop = target.GetProperty("VS_SOLUTION_DEPLOY")) {
+    // If set, it dictates behavior
+    return cmIsOn(
       cmGeneratorExpression::Evaluate(prop, target.LocalGenerator, config));
   }
-  return rVal;
+
+  // To be deprecated, disable deployment even if target supports it.
+  if (const char* prop = target.GetProperty("VS_NO_SOLUTION_DEPLOY")) {
+    if (cmIsOn(cmGeneratorExpression::Evaluate(prop, target.LocalGenerator,
+                                               config))) {
+      // If true, always disable deployment
+      return false;
+    }
+  }
+
+  // Legacy behavior, enabled deployment based on 'hard-coded' target
+  // platforms.
+  return this->TargetSystemSupportsDeployment();
 }
 
 bool cmGlobalVisualStudio8Generator::TargetSystemSupportsDeployment() const
@@ -325,9 +333,10 @@ bool cmGlobalVisualStudio8Generator::NeedLinkLibraryDependencies(
   cmGeneratorTarget* target)
 {
   // Look for utility dependencies that magically link.
-  for (BT<std::string> const& ui : target->GetUtilities()) {
+  for (BT<std::pair<std::string, bool>> const& ui : target->GetUtilities()) {
     if (cmGeneratorTarget* depTarget =
-          target->GetLocalGenerator()->FindGeneratorTargetToUse(ui.Value)) {
+          target->GetLocalGenerator()->FindGeneratorTargetToUse(
+            ui.Value.first)) {
       if (depTarget->GetType() != cmStateEnums::INTERFACE_LIBRARY &&
           depTarget->GetProperty("EXTERNAL_MSPROJECT")) {
         // This utility dependency names an external .vcproj target.

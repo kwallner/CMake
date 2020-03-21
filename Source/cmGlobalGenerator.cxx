@@ -262,17 +262,16 @@ void cmGlobalGenerator::ResolveLanguageCompiler(const std::string& lang,
   }
 }
 
-void cmGlobalGenerator::AddBuildExportSet(
-  std::unique_ptr<cmExportBuildFileGenerator> gen)
+void cmGlobalGenerator::AddBuildExportSet(cmExportBuildFileGenerator* gen)
 {
-  this->BuildExportSets[gen->GetMainExportFileName()] = std::move(gen);
+  this->BuildExportSets[gen->GetMainExportFileName()] = gen;
 }
 
 void cmGlobalGenerator::AddBuildExportExportSet(
-  std::unique_ptr<cmExportBuildFileGenerator> gen)
+  cmExportBuildFileGenerator* gen)
 {
-  this->BuildExportExportSets[gen->GetMainExportFileName()] = gen.get();
-  this->AddBuildExportSet(std::move(gen));
+  this->BuildExportExportSets[gen->GetMainExportFileName()] = gen;
+  this->AddBuildExportSet(gen);
 }
 
 bool cmGlobalGenerator::GenerateImportFile(const std::string& file)
@@ -283,7 +282,7 @@ bool cmGlobalGenerator::GenerateImportFile(const std::string& file)
 
     if (!this->ConfigureDoneCMP0026AndCMP0024) {
       for (const auto& m : this->Makefiles) {
-        m->RemoveExportBuildFileGeneratorCMP0024(it->second.get());
+        m->RemoveExportBuildFileGeneratorCMP0024(it->second);
       }
     }
 
@@ -446,8 +445,8 @@ bool cmGlobalGenerator::FindMakeProgram(cmMakefile* mf)
     cmSystemTools::GetShortPath(makeProgram, makeProgram);
     cmSystemTools::SplitProgramPath(makeProgram, dir, file);
     makeProgram = cmStrCat(dir, '/', saveFile);
-    mf->AddCacheDefinition("CMAKE_MAKE_PROGRAM", makeProgram.c_str(),
-                           "make program", cmStateEnums::FILEPATH);
+    mf->AddCacheDefinition("CMAKE_MAKE_PROGRAM", makeProgram, "make program",
+                           cmStateEnums::FILEPATH);
   }
   return true;
 }
@@ -1317,7 +1316,7 @@ cmExportBuildFileGenerator* cmGlobalGenerator::GetExportedTargetsFile(
   const std::string& filename) const
 {
   auto const it = this->BuildExportSets.find(filename);
-  return it == this->BuildExportSets.end() ? nullptr : it->second.get();
+  return it == this->BuildExportSets.end() ? nullptr : it->second;
 }
 
 void cmGlobalGenerator::AddCMP0042WarnTarget(const std::string& target)
@@ -1353,16 +1352,51 @@ bool cmGlobalGenerator::CheckALLOW_DUPLICATE_CUSTOM_TARGETS() const
 void cmGlobalGenerator::ComputeBuildFileGenerators()
 {
   for (unsigned int i = 0; i < this->LocalGenerators.size(); ++i) {
-    std::vector<cmExportBuildFileGenerator*> gens =
+    std::vector<std::unique_ptr<cmExportBuildFileGenerator>> const& gens =
       this->Makefiles[i]->GetExportBuildFileGenerators();
-    for (cmExportBuildFileGenerator* g : gens) {
+    for (std::unique_ptr<cmExportBuildFileGenerator> const& g : gens) {
       g->Compute(this->LocalGenerators[i].get());
     }
   }
 }
 
+bool cmGlobalGenerator::UnsupportedVariableIsDefined(const std::string& name,
+                                                     bool supported) const
+{
+  if (!supported && this->Makefiles.front()->GetDefinition(name)) {
+    std::ostringstream e;
+    /* clang-format off */
+    e <<
+      "Generator\n"
+      "  " << this->GetName() << "\n"
+      "does not support variable\n"
+      "  " << name << "\n"
+      "but it has been specified."
+      ;
+    /* clang-format on */
+    this->GetCMakeInstance()->IssueMessage(MessageType::FATAL_ERROR, e.str());
+    return true;
+  }
+
+  return false;
+}
+
 bool cmGlobalGenerator::Compute()
 {
+  // Make sure unsupported variables are not used.
+  if (this->UnsupportedVariableIsDefined("CMAKE_DEFAULT_BUILD_TYPE",
+                                         this->SupportsDefaultBuildType())) {
+    return false;
+  }
+  if (this->UnsupportedVariableIsDefined("CMAKE_CROSS_CONFIGS",
+                                         this->SupportsCrossConfigs())) {
+    return false;
+  }
+  if (this->UnsupportedVariableIsDefined("CMAKE_DEFAULT_CONFIGS",
+                                         this->SupportsDefaultConfigs())) {
+    return false;
+  }
+
   // Some generators track files replaced during the Generate.
   // Start with an empty vector:
   this->FilesReplacedDuringGenerate.clear();
@@ -1878,6 +1912,10 @@ int cmGlobalGenerator::Build(
     output += "\n";
     return 1;
   }
+  std::string realConfig = config;
+  if (realConfig.empty()) {
+    realConfig = this->GetDefaultBuildConfig();
+  }
 
   int retVal = 0;
   cmSystemTools::SetRunCommandHideConsole(true);
@@ -1886,7 +1924,7 @@ int cmGlobalGenerator::Build(
 
   std::vector<GeneratedMakeCommand> makeCommand =
     this->GenerateBuildCommand(makeCommandCSTR, projectName, bindir, targets,
-                               config, fast, jobs, verbose, nativeOptions);
+                               realConfig, fast, jobs, verbose, nativeOptions);
 
   // Workaround to convince some commands to produce output.
   if (outputflag == cmSystemTools::OUTPUT_PASSTHROUGH &&
@@ -1898,7 +1936,7 @@ int cmGlobalGenerator::Build(
   if (clean) {
     std::vector<GeneratedMakeCommand> cleanCommand =
       this->GenerateBuildCommand(makeCommandCSTR, projectName, bindir,
-                                 { "clean" }, config, fast, jobs, verbose);
+                                 { "clean" }, realConfig, fast, jobs, verbose);
     output += "\nRun Clean Command:";
     output += cleanCommand.front().Printable();
     output += "\n";
@@ -2685,7 +2723,7 @@ cmTarget cmGlobalGenerator::CreateGlobalTarget(GlobalTargetInfo const& gti,
     target.SetProperty("EchoString", gti.Message);
   }
   for (std::string const& d : gti.Depends) {
-    target.AddUtility(d);
+    target.AddUtility(d, false);
   }
 
   // Organize in the "predefined targets" folder:

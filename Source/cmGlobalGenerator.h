@@ -44,6 +44,7 @@ class cmLocalGenerator;
 class cmMakefile;
 class cmOutputConverter;
 class cmSourceFile;
+class cmState;
 class cmStateDirectory;
 class cmake;
 
@@ -134,6 +135,12 @@ public:
       is supported and false otherwise.  */
   virtual bool SetGeneratorToolset(std::string const& ts, bool build,
                                    cmMakefile* mf);
+
+  /** Read any other cache entries needed for cmake --build. */
+  virtual bool ReadCacheEntriesForBuild(const cmState& /*state*/)
+  {
+    return true;
+  }
 
   /**
    * Create LocalGenerators and process the CMakeLists files. This does not
@@ -382,6 +389,9 @@ public:
   // Lookup edit_cache target command preferred by this generator.
   virtual std::string GetEditCacheCommand() const { return ""; }
 
+  // Default config to use for cmake --build
+  virtual std::string GetDefaultBuildConfig() const { return "Debug"; }
+
   // Class to track a set of dependencies.
   using TargetDependSet = cmTargetDependSet;
 
@@ -438,22 +448,27 @@ public:
       MacFolder. */
   virtual bool ShouldStripResourcePath(cmMakefile*) const;
 
+  virtual bool SupportsCustomCommandDepfile() const { return false; }
+
   std::string GetSharedLibFlagsForLanguage(std::string const& lang) const;
 
   /** Generate an <output>.rule file path for a given command output.  */
   virtual std::string GenerateRuleFile(std::string const& output) const;
 
+  virtual bool SupportsDefaultBuildType() const { return false; }
+  virtual bool SupportsCrossConfigs() const { return false; }
+  virtual bool SupportsDefaultConfigs() const { return false; }
+
   static std::string EscapeJSON(const std::string& s);
 
   void ProcessEvaluationFiles();
 
-  std::map<std::string, std::unique_ptr<cmExportBuildFileGenerator>>&
-  GetBuildExportSets()
+  std::map<std::string, cmExportBuildFileGenerator*>& GetBuildExportSets()
   {
     return this->BuildExportSets;
   }
-  void AddBuildExportSet(std::unique_ptr<cmExportBuildFileGenerator>);
-  void AddBuildExportExportSet(std::unique_ptr<cmExportBuildFileGenerator>);
+  void AddBuildExportSet(cmExportBuildFileGenerator* gen);
+  void AddBuildExportExportSet(cmExportBuildFileGenerator* gen);
   bool IsExportedTargetsFile(const std::string& filename) const;
   bool GenerateImportFile(const std::string& file);
   cmExportBuildFileGenerator* GetExportedTargetsFile(
@@ -564,8 +579,7 @@ protected:
   std::set<std::string> InstallComponents;
   // Sets of named target exports
   cmExportSetMap ExportSets;
-  std::map<std::string, std::unique_ptr<cmExportBuildFileGenerator>>
-    BuildExportSets;
+  std::map<std::string, cmExportBuildFileGenerator*> BuildExportSets;
   std::map<std::string, cmExportBuildFileGenerator*> BuildExportExportSets;
 
   std::map<std::string, std::string> AliasTargets;
@@ -661,6 +675,9 @@ private:
   void IndexLocalGenerator(cmLocalGenerator* lg);
 
   virtual const char* GetBuildIgnoreErrorsFlag() const { return nullptr; }
+
+  bool UnsupportedVariableIsDefined(const std::string& name,
+                                    bool supported) const;
 
   // Cache directory content and target files to be built.
   struct DirectoryContent

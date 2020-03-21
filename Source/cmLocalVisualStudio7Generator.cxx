@@ -2,6 +2,8 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmLocalVisualStudio7Generator.h"
 
+#include <cm/memory>
+
 #include <windows.h>
 
 #include <ctype.h> // for isspace
@@ -52,14 +54,11 @@ extern cmVS7FlagTable cmLocalVisualStudio7GeneratorFlagTable[];
 cmLocalVisualStudio7Generator::cmLocalVisualStudio7Generator(
   cmGlobalGenerator* gg, cmMakefile* mf)
   : cmLocalVisualStudioGenerator(gg, mf)
+  , Internal(cm::make_unique<cmLocalVisualStudio7GeneratorInternals>(this))
 {
-  this->Internal = new cmLocalVisualStudio7GeneratorInternals(this);
 }
 
-cmLocalVisualStudio7Generator::~cmLocalVisualStudio7Generator()
-{
-  delete this->Internal;
-}
+cmLocalVisualStudio7Generator::~cmLocalVisualStudio7Generator() = default;
 
 void cmLocalVisualStudio7Generator::AddHelperCommands()
 {
@@ -1254,11 +1253,11 @@ void cmLocalVisualStudio7GeneratorInternals::OutputLibraries(
   for (auto const& lib : libs) {
     if (lib.IsPath) {
       std::string rel =
-        lg->MaybeConvertToRelativePath(currentBinDir, lib.Value);
+        lg->MaybeConvertToRelativePath(currentBinDir, lib.Value.Value);
       fout << lg->ConvertToXMLOutputPath(rel) << " ";
     } else if (!lib.Target ||
                lib.Target->GetType() != cmStateEnums::INTERFACE_LIBRARY) {
-      fout << lib.Value << " ";
+      fout << lib.Value.Value << " ";
     }
   }
 }
@@ -1511,10 +1510,9 @@ cmLocalVisualStudio7GeneratorFCInfo::cmLocalVisualStudio7GeneratorFCInfo(
     if (const char* deps = sf.GetProperty("OBJECT_DEPENDS")) {
       std::vector<std::string> depends = cmExpandedList(deps);
       const char* sep = "";
-      for (std::vector<std::string>::iterator j = depends.begin();
-           j != depends.end(); ++j) {
+      for (const std::string& d : depends) {
         fc.AdditionalDeps += sep;
-        fc.AdditionalDeps += lg->ConvertToXMLOutputPath(*j);
+        fc.AdditionalDeps += lg->ConvertToXMLOutputPath(d);
         sep = ";";
         needfc = true;
       }

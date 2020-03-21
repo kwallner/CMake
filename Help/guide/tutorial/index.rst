@@ -183,7 +183,7 @@ last few lines of the top-level ``CMakeLists.txt`` file should now look like:
                                   )
 
 Now let us make the MathFunctions library optional. While for the tutorial
-there really isn’t any need to do so, for larger projects this is a common
+there really isn't any need to do so, for larger projects this is a common
 occurrence. The first step is to add an option to the top-level
 ``CMakeLists.txt`` file.
 
@@ -386,7 +386,7 @@ these functions using the :module:`CheckSymbolExists` module in the top-level
 .. literalinclude:: Step6/MathFunctions/CMakeLists.txt
   :language: cmake
   :start-after: # does this system provide the log and exp functions?
-  :end-before: if(HAVE_LOG AND HAVE_EXP)
+  :end-before: # add compile definitions
 
 Now let's add these defines to ``TutorialConfig.h.in`` so that we can use them
 from ``mysqrt.cxx``:
@@ -918,8 +918,8 @@ subbdirectories. The layout will look like:
 .. code-block:: none
 
   - Step12
-     └── debug
-     └── release
+     - debug
+     - release
 
 Now we need to setup debug and release builds. We can use
 :variable:`CMAKE_BUILD_TYPE` to set the configuration type:

@@ -291,7 +291,7 @@ public:
 
   cmListFileBacktrace GetBacktrace() const;
 
-  std::set<BT<std::string>> const& GetUtilities() const;
+  std::set<BT<std::pair<std::string, bool>>> const& GetUtilities() const;
 
   bool LinkLanguagePropagatesToDependents() const
   {
@@ -357,7 +357,6 @@ public:
   };
 
   LinkClosure const* GetLinkClosure(const std::string& config) const;
-  void ComputeLinkClosure(const std::string& config, LinkClosure& lc) const;
 
   cmLinkImplementation const* GetLinkImplementation(
     const std::string& config) const;
@@ -589,6 +588,9 @@ public:
   /** Get target file postfix */
   std::string GetFilePostfix(const std::string& config) const;
 
+  /** Get framework multi-config-specific postfix */
+  std::string GetFrameworkMultiConfigPostfix(const std::string& config) const;
+
   /** Clears cached meta data for local and external source files.
    * The meta data will be recomputed on demand.
    */
@@ -816,6 +818,7 @@ private:
                            std::string& outPrefix, std::string& outBase,
                            std::string& outSuffix) const;
 
+  mutable std::string LinkerLanguage;
   using LinkClosureMapType = std::map<std::string, LinkClosure>;
   mutable LinkClosureMapType LinkClosureMap;
 
@@ -850,6 +853,10 @@ private:
   void CheckPropertyCompatibility(cmComputeLinkInformation& info,
                                   const std::string& config) const;
 
+  void ComputeLinkClosure(const std::string& config, LinkClosure& lc) const;
+  bool ComputeLinkClosure(const std::string& config, LinkClosure& lc,
+                          bool secondPass) const;
+
   struct LinkImplClosure : public std::vector<cmGeneratorTarget const*>
   {
     bool Done = false;
@@ -867,6 +874,17 @@ private:
 
   std::string GetLinkInterfaceDependentStringAsBoolProperty(
     const std::string& p, const std::string& config) const;
+
+  friend class cmTargetCollectLinkLanguages;
+  cmLinkInterface const* GetLinkInterface(const std::string& config,
+                                          const cmGeneratorTarget* headTarget,
+                                          bool secondPass) const;
+  void ComputeLinkInterface(const std::string& config,
+                            cmOptionalLinkInterface& iface,
+                            const cmGeneratorTarget* head,
+                            bool secondPass) const;
+  cmLinkImplementation const* GetLinkImplementation(const std::string& config,
+                                                    bool secondPass) const;
 
   // Cache import information from properties for each configuration.
   struct ImportInfo
@@ -894,9 +912,10 @@ private:
       the link dependencies of this target.  */
   std::string CheckCMP0004(std::string const& item) const;
 
-  cmLinkInterface const* GetImportLinkInterface(
-    const std::string& config, const cmGeneratorTarget* head,
-    bool usage_requirements_only) const;
+  cmLinkInterface const* GetImportLinkInterface(const std::string& config,
+                                                const cmGeneratorTarget* head,
+                                                bool usage_requirements_only,
+                                                bool secondPass = false) const;
 
   using KindedSourcesMapType = std::map<std::string, KindedSources>;
   mutable KindedSourcesMapType KindedSourcesMap;
@@ -940,7 +959,8 @@ private:
                        const cmGeneratorTarget* headTarget,
                        bool usage_requirements_only,
                        std::vector<cmLinkItem>& items,
-                       bool& hadHeadSensitiveCondition) const;
+                       bool& hadHeadSensitiveCondition,
+                       bool& hadLinkLanguageSensitiveCondition) const;
   void LookupLinkItems(std::vector<std::string> const& names,
                        cmListFileBacktrace const& bt,
                        std::vector<cmLinkItem>& items) const;

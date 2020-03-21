@@ -132,13 +132,22 @@ std::vector<std::string> cmState::GetCacheEntryKeys() const
   return definitions;
 }
 
-const char* cmState::GetCacheEntryValue(std::string const& key) const
+cmProp cmState::GetCacheEntryValue(std::string const& key) const
 {
   cmCacheManager::CacheEntry* e = this->CacheManager->GetCacheEntry(key);
   if (!e) {
     return nullptr;
   }
-  return e->Value.c_str();
+  return &e->Value;
+}
+
+std::string cmState::GetSafeCacheEntryValue(std::string const& key) const
+{
+  cmProp val = this->GetCacheEntryValue(key);
+  if (val) {
+    return *val;
+  }
+  return std::string();
 }
 
 const std::string* cmState::GetInitializedCacheValue(
@@ -325,8 +334,8 @@ cmStateSnapshot cmState::Reset()
 
 void cmState::DefineProperty(const std::string& name,
                              cmProperty::ScopeType scope,
-                             const char* ShortDescription,
-                             const char* FullDescription, bool chained)
+                             const std::string& ShortDescription,
+                             const std::string& FullDescription, bool chained)
 {
   this->PropertyDefinitions[scope].DefineProperty(
     name, scope, ShortDescription, FullDescription, chained);
@@ -615,7 +624,8 @@ const char* cmState::GetGlobalProperty(const std::string& prop)
   }
 
 #undef STRING_LIST_ELEMENT
-  return this->GlobalProperties.GetPropertyValue(prop);
+  cmProp retVal = this->GlobalProperties.GetPropertyValue(prop);
+  return retVal ? retVal->c_str() : nullptr;
 }
 
 bool cmState::GetGlobalPropertyAsBool(const std::string& prop)

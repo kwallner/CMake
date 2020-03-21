@@ -17,6 +17,7 @@
 #include "cmSourceFile.h"
 #include "cmStateTypes.h"
 #include "cmStringAlgorithms.h"
+#include "cmTarget.h"
 
 cmCommonTargetGenerator::cmCommonTargetGenerator(cmGeneratorTarget* gt)
   : GeneratorTarget(gt)
@@ -216,6 +217,20 @@ std::string cmCommonTargetGenerator::GetManifests(const std::string& config)
   return cmJoin(manifests, " ");
 }
 
+std::string cmCommonTargetGenerator::GetAIXExports(std::string const&)
+{
+  std::string aixExports;
+  if (this->GeneratorTarget->Target->IsAIX()) {
+    if (const char* exportAll =
+          this->GeneratorTarget->GetProperty("AIX_EXPORT_ALL_SYMBOLS")) {
+      if (cmIsOff(exportAll)) {
+        aixExports = "-n";
+      }
+    }
+  }
+  return aixExports;
+}
+
 void cmCommonTargetGenerator::AppendOSXVerFlag(std::string& flags,
                                                const std::string& lang,
                                                const char* name, bool so)
@@ -233,7 +248,7 @@ void cmCommonTargetGenerator::AppendOSXVerFlag(std::string& flags,
   int major;
   int minor;
   int patch;
-  std::string prop = cmStrCat("OSX_", name, "_VERSION");
+  std::string prop = cmStrCat("MACHO_", name, "_VERSION");
   std::string fallback_prop = so ? "SOVERSION" : "VERSION";
   this->GeneratorTarget->GetTargetVersionFallback(prop, fallback_prop, major,
                                                   minor, patch);

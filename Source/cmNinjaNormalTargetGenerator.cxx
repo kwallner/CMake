@@ -197,7 +197,7 @@ void cmNinjaNormalTargetGenerator::WriteDeviceLinkRule(
 
     // build response file name
     std::string responseFlag = this->GetMakefile()->GetSafeDefinition(
-      "CMAKE_CUDA_RESPONSE_FILE_LINK_FLAG");
+      "CMAKE_CUDA_RESPONSE_FILE_DEVICE_LINK_FLAG");
 
     if (!useResponseFile || responseFlag.empty()) {
       vars.Objects = "$in";
@@ -286,6 +286,7 @@ void cmNinjaNormalTargetGenerator::WriteLinkRule(bool useResponseFile,
 
     std::string lang = this->TargetLinkLanguage(config);
     vars.Language = config.c_str();
+    vars.AIXExports = "$AIX_EXPORTS";
 
     if (this->TargetLinkLanguage(config) == "Swift") {
       vars.SwiftLibraryName = "$SWIFT_LIBRARY_NAME";
@@ -310,7 +311,7 @@ void cmNinjaNormalTargetGenerator::WriteLinkRule(bool useResponseFile,
 
     if (flag) {
       responseFlag = flag;
-    } else if (this->TargetLinkLanguage(config) != "CUDA") {
+    } else {
       responseFlag = "@";
     }
 
@@ -550,16 +551,23 @@ std::vector<std::string> cmNinjaNormalTargetGenerator::ComputeLinkCmd(
         linkCmds.push_back(cmakeCommand + " -E touch $TARGET_FILE");
       }
 #endif
-      return linkCmds;
-    }
+    } break;
     case cmStateEnums::SHARED_LIBRARY:
     case cmStateEnums::MODULE_LIBRARY:
+      break;
     case cmStateEnums::EXECUTABLE:
+      if (this->TargetLinkLanguage(config) == "Swift") {
+        if (this->GeneratorTarget->IsExecutableWithExports()) {
+          const std::string flags =
+            this->Makefile->GetSafeDefinition("CMAKE_EXE_EXPORTS_Swift_FLAG");
+          cmExpandList(flags, linkCmds);
+        }
+      }
       break;
     default:
       assert(false && "Unexpected target type");
   }
-  return std::vector<std::string>();
+  return linkCmds;
 }
 
 void cmNinjaNormalTargetGenerator::WriteDeviceLinkStatement(
@@ -804,8 +812,20 @@ void cmNinjaNormalTargetGenerator::WriteLinkStatement(
     targetOutputReal = this->ConvertToNinjaPath(targetOutputReal);
   } else if (gt->IsFrameworkOnApple()) {
     // Create the library framework.
+
+    cmOSXBundleGenerator::SkipParts bundleSkipParts;
+    if (globalGen->GetName() == "Ninja Multi-Config") {
+      const auto postFix = this->GeneratorTarget->GetFilePostfix(config);
+      // Skip creating Info.plist when there are multiple configurations, and
+      // the current configuration has a postfix. The non-postfix configuration
+      // Info.plist can be used by all the other configurations.
+      if (!postFix.empty()) {
+        bundleSkipParts.infoPlist = true;
+      }
+    }
+
     this->OSXBundleGenerator->CreateFramework(
-      tgtNames.Output, gt->GetDirectory(config), config);
+      tgtNames.Output, gt->GetDirectory(config), config, bundleSkipParts);
   } else if (gt->IsCFBundleOnApple()) {
     // Create the core foundation bundle.
     this->OSXBundleGenerator->CreateCFBundle(tgtNames.Output,
@@ -865,11 +885,11 @@ void cmNinjaNormalTargetGenerator::WriteLinkStatement(
         cmOutputConverter::SHELL);
     }(vars["SWIFT_MODULE_NAME"]);
 
+    const std::string map = cmStrCat(gt->GetSupportDirectory(), '/', config,
+                                     '/', "output-file-map.json");
     vars["SWIFT_OUTPUT_FILE_MAP"] =
       this->GetLocalGenerator()->ConvertToOutputFormat(
-        this->ConvertToNinjaPath(gt->GetSupportDirectory() +
-                                 "/output-file-map.json"),
-        cmOutputConverter::SHELL);
+        this->ConvertToNinjaPath(map), cmOutputConverter::SHELL);
 
     vars["SWIFT_SOURCES"] = [this, config]() -> std::string {
       std::vector<cmSourceFile const*> sources;
@@ -955,6 +975,7 @@ void cmNinjaNormalTargetGenerator::WriteLinkStatement(
   vars["LINK_FLAGS"] = globalGen->EncodeLiteral(vars["LINK_FLAGS"]);
 
   vars["MANIFESTS"] = this->GetManifests(config);
+  vars["AIX_EXPORTS"] = this->GetAIXExports(config);
 
   vars["LINK_PATH"] = frameworkPath + linkPath;
   std::string lwyuFlags;

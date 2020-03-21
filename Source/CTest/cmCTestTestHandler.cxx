@@ -410,10 +410,15 @@ int cmCTestTestHandler::ProcessHandler()
 
   auto clock_finish = std::chrono::steady_clock::now();
 
+  bool noTestsFoundError = false;
   if (passed.size() + failed.size() == 0) {
-    if (!this->CTest->GetShowOnly() && !this->CTest->ShouldPrintLabels()) {
+    if (!this->CTest->GetShowOnly() && !this->CTest->ShouldPrintLabels() &&
+        this->CTest->GetNoTestsMode() != cmCTest::NoTests::Ignore) {
       cmCTestLog(this->CTest, ERROR_MESSAGE,
                  "No tests were found!!!" << std::endl);
+      if (this->CTest->GetNoTestsMode() == cmCTest::NoTests::Error) {
+        noTestsFoundError = true;
+      }
     }
   } else {
     if (this->HandlerVerbose && !passed.empty() &&
@@ -459,6 +464,12 @@ int cmCTestTestHandler::ProcessHandler()
     this->LogFile = nullptr;
     return -1;
   }
+
+  if (noTestsFoundError) {
+    this->LogFile = nullptr;
+    return -1;
+  }
+
   this->LogFile = nullptr;
   return 0;
 }
@@ -537,6 +548,7 @@ bool cmCTestTestHandler::ProcessOptions()
   val = this->GetOption("ResourceSpecFile");
   if (val) {
     this->UseResourceSpec = true;
+    this->ResourceSpecFile = val;
     auto result = this->ResourceSpec.ReadFromJSONFile(val);
     if (result != cmCTestResourceSpec::ReadFileResult::READ_OK) {
       cmCTestLog(this->CTest, ERROR_MESSAGE,
@@ -1255,7 +1267,7 @@ void cmCTestTestHandler::ProcessDirectory(std::vector<std::string>& passed,
   this->StartTestTime = std::chrono::system_clock::now();
   auto elapsed_time_start = std::chrono::steady_clock::now();
 
-  cmCTestMultiProcessHandler* parallel = new cmCTestMultiProcessHandler;
+  auto parallel = cm::make_unique<cmCTestMultiProcessHandler>();
   parallel->SetCTest(this->CTest);
   parallel->SetParallelLevel(this->CTest->GetParallelLevel());
   parallel->SetTestHandler(this);
@@ -1326,7 +1338,6 @@ void cmCTestTestHandler::ProcessDirectory(std::vector<std::string>& passed,
   } else {
     parallel->RunTests();
   }
-  delete parallel;
   this->EndTest = this->CTest->CurrentTime();
   this->EndTestTime = std::chrono::system_clock::now();
   this->ElapsedTestingTime =
@@ -2004,13 +2015,13 @@ void cmCTestTestHandler::GenerateRegressionImages(cmXMLWriter& xml,
                                 | std::ios::binary
 #endif
           );
-          unsigned char* file_buffer = new unsigned char[len + 1];
-          ifs.read(reinterpret_cast<char*>(file_buffer), len);
-          unsigned char* encoded_buffer = new unsigned char[static_cast<int>(
-            static_cast<double>(len) * 1.5 + 5.0)];
+          auto file_buffer = cm::make_unique<unsigned char[]>(len + 1);
+          ifs.read(reinterpret_cast<char*>(file_buffer.get()), len);
+          auto encoded_buffer = cm::make_unique<unsigned char[]>(
+            static_cast<int>(static_cast<double>(len) * 1.5 + 5.0));
 
-          size_t rlen =
-            cmsysBase64_Encode(file_buffer, len, encoded_buffer, 1);
+          size_t rlen = cmsysBase64_Encode(file_buffer.get(), len,
+                                           encoded_buffer.get(), 1);
 
           xml.StartElement("NamedMeasurement");
           xml.Attribute(measurementfile.match(1).c_str(),
@@ -2027,8 +2038,6 @@ void cmCTestTestHandler::GenerateRegressionImages(cmXMLWriter& xml,
           }
           xml.Element("Value", ostr.str());
           xml.EndElement(); // NamedMeasurement
-          delete[] file_buffer;
-          delete[] encoded_buffer;
         }
       } else {
         int idx = 4;
@@ -2073,11 +2082,10 @@ void cmCTestTestHandler::SetTestsToRunInformation(const char* in)
   if (cmSystemTools::FileExists(in)) {
     cmsys::ifstream fin(in);
     unsigned long filelen = cmSystemTools::FileLength(in);
-    char* buff = new char[filelen + 1];
-    fin.getline(buff, filelen);
+    auto buff = cm::make_unique<char[]>(filelen + 1);
+    fin.getline(buff.get(), filelen);
     buff[fin.gcount()] = 0;
-    this->TestsToRunString = buff;
-    delete[] buff;
+    this->TestsToRunString = buff.get();
   }
 }
 
