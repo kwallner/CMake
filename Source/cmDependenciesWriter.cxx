@@ -32,44 +32,36 @@ cmDependenciesWriter::cmDependenciesWriter(std::string const& fileName,
   , JsonRoot()
   , GlobalGenerator(globalGenerator)
 {
-  JsonRoot["graph"] = Json::Value();
-  JsonRoot["graph"]["directed"] = true;
-  JsonRoot["graph"]["type"] = "graph type";
-  JsonRoot["graph"]["label"] = GlobalGenerator->GetSafeGlobalSetting("CMAKE_PROJECT_NAME");
-  JsonRoot["graph"]["metadata"] = Json::Value(Json::objectValue);
-  JsonRoot["graph"]["nodes"] = Json::Value(Json::objectValue);
-  JsonRoot["graph"]["edges"] = Json::Value(Json::arrayValue);
+  JsonRoot["name"] = GlobalGenerator->GetSafeGlobalSetting("CMAKE_PROJECT_NAME");
+  JsonRoot["generator"] = GlobalGenerator->GetJson();
+  JsonRoot["targets"] = Json::Value(Json::objectValue);
+  JsonRoot["links"] = Json::Value(Json::arrayValue);
 
   {
-    Json::Value& cmake_definfions = JsonRoot["graph"]["metadata"]["cmake_definitions"] = Json::Value(Json::objectValue);
     const auto& lg = GlobalGenerator->GetLocalGenerators()[0];
-
-    const cmMakefile* mf = lg->GetMakefile();
-    std::vector<std::string> definitions = mf->GetDefinitions();
-    for (const std::string& definiton : definitions) {
-      const std::string& value = mf->GetSafeDefinition(definiton);
-      if (value.find(';') == std::string::npos)
-      {
-        cmake_definfions[definiton] = value;
-      }
-      else 
-      {
-        std::vector<std::string> list_values = cmSystemTools::SplitString(value, ';');
-        Json::Value& cmake_array = cmake_definfions[definiton] = Json::Value(Json::arrayValue);
-        for (const std::string& list_value : list_values) {
-          cmake_array.append(list_value);
-        }
-      }
-    }
+    
   }
 
   {
-    Json::Value& metadata = JsonRoot["graph"]["metadata"];
-    metadata["conan_dependencies"] = Json::Value(Json::arrayValue);
-    std::vector<std::string> conan_dependencies = cmSystemTools::SplitString(globalGenerator->GetSafeGlobalSetting("CONAN_DEPENDENCIES"), ';', false);
-    for (const auto& conan_dependency : conan_dependencies)
-    {
-      metadata["conan_dependencies"].append(conan_dependency);
+    const auto& lg = GlobalGenerator->GetLocalGenerators()[0];
+    const cmMakefile* mf = lg->GetMakefile();
+
+    Json::Value& cmake_definfions = JsonRoot["definitions"] = Json::Value(Json::objectValue);
+    std::vector<std::string> definition_keys = mf->GetDefinitions();
+    for (const std::string& definition_key : definition_keys) {
+      const std::string& definition_value = mf->GetSafeDefinition(definition_key);
+      if (definition_value.find(';') == std::string::npos)
+      {
+        cmake_definfions[definition_key] = definition_value;
+      }
+      else 
+      {
+        std::vector<std::string> definition_list_values = cmSystemTools::SplitString(definition_value, ';');
+        Json::Value& cmake_array = cmake_definfions[definition_key] = Json::Value(Json::arrayValue);
+        for (const std::string& definition_list_value : definition_list_values) {
+          cmake_array.append(definition_list_value);
+        }
+      }
     }
   }
 }
@@ -79,8 +71,7 @@ cmDependenciesWriter::~cmDependenciesWriter()
   std::ofstream output_file;
   output_file.open(FileName);
 
-  if (output_file.is_open())
-  {
+  if (output_file.is_open()) {
     Json::StreamWriterBuilder builder;
     builder["commentStyle"] = "None"; // FIXME: Use config?
     builder["indentation"] = "   "; // Fixme: Use ident length and ident use spaces
@@ -89,8 +80,7 @@ cmDependenciesWriter::~cmDependenciesWriter()
     writer->write(JsonRoot, &output_file);
     output_file.close();
   }
-  else 
-  {
+  else {
     cmSystemTools::Error("Problem writing Dependencies to file: " + FileName);
   }
 }
@@ -106,17 +96,37 @@ void cmDependenciesWriter::OnItem(cmLinkItem const& item)
     return;
   }
 
-  Json::Value nodeValue(Json::objectValue); 
-  nodeValue["type"] = "node type";
-  nodeValue["label"] = cmStrCat("Target ", item.AsStr());
-  Json::Value& metadata = nodeValue["metadata"] = Json::Value(Json::objectValue);
-  if (item.Target)
-  {
-    metadata["target_type"] = cmState::GetTargetTypeName(item.Target->GetType());
+  Json::Value targetValue(Json::objectValue);
+  const std::string& targetName = item.AsStr();
+  targetValue["name"] = targetName;
+
+  if (item.Target) {
+    const auto& Target = *(item.Target);
+    targetValue["type"] = cmState::GetTargetTypeName(Target.GetType());
+
+    {
+      Json::Value& targetProperties = targetValue["properties"] = Json::Value(Json::objectValue);
+
+      std::vector<std::string> property_keys = Target.GetPropertyKeys();
+      for (const std::string& property_key : property_keys) {
+        const std::string& property_value = Target.GetProperty(property_key);
+        if (property_value.find(';') == std::string::npos)
+        {
+          targetProperties[property_key] = property_value;
+        }
+        else
+        {
+          std::vector<std::string> property_list_values = cmSystemTools::SplitString(property_value, ';');
+          Json::Value& cmake_array = targetValue[property_key] = Json::Value(Json::arrayValue);
+          for (const std::string& property_list_value : property_list_values) {
+            cmake_array.append(property_list_value);
+          }
+        }
+      }
+    }
   }
-  JsonRoot["graph"]["nodes"][item.AsStr()] = nodeValue;
 
-
+  JsonRoot["targets"][targetName] = targetValue;
 }
 
 void cmDependenciesWriter::OnDirectLink(cmLinkItem const& depender,
@@ -129,15 +139,13 @@ void cmDependenciesWriter::OnDirectLink(cmLinkItem const& depender,
     return;
   }
 
-  Json::Value edgeValue(Json::objectValue);
-  edgeValue["relation"] = "edge relationship",
-  edgeValue["source"] = depender.AsStr();
-  edgeValue["target"] = dependee.AsStr();
+  Json::Value linkValue(Json::objectValue);
+  linkValue["source"] = depender.AsStr();
+  linkValue["target"] = dependee.AsStr();
 
-  Json::Value& metadata = edgeValue["metadata"] = Json::Value(Json::objectValue);
-  metadata["dependency_type"] = DependencyTypeAsString(dt);
+  linkValue["dependency_type"] = DependencyTypeAsString(dt);
   
-  JsonRoot["graph"]["edges"].append(edgeValue);
+  JsonRoot["links"].append(linkValue);
 }
 
 void cmDependenciesWriter::OnIndirectLink(cmLinkItem const& depender,
